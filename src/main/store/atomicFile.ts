@@ -19,6 +19,11 @@ export function errorCode(error: unknown): string | null {
   return null
 }
 
+// 记事本等编辑器可能存成「UTF-8 带 BOM」，JSON.parse 不认开头的 BOM，会把合法文件当成损坏。
+export function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }

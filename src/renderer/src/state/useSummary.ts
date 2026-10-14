@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import type { SummaryResult } from '@shared/api'
+import { dateKeyFromIso } from '@shared/dates'
 import { tasksFingerprint } from '@shared/fingerprint'
 import type { Task } from '@shared/types'
 import { callApi } from '../lib/callApi'
@@ -8,7 +9,7 @@ export type SummaryController = {
   summary: SummaryResult | null
   loading: boolean
   error: string | null
-  /** 结果是新鲜的：生成之后任务没有变过。 */
+  /** 结果是新鲜的：今天生成、且生成之后任务没有变过。过了午夜，昨天的总结不算新鲜。 */
   fresh: boolean
   generate: () => void
   cancel: () => void
@@ -16,13 +17,17 @@ export type SummaryController = {
   receive: (summary: SummaryResult) => void
 }
 
-export function useSummary(tasks: Task[] | null): SummaryController {
+export function useSummary(tasks: Task[] | null, today: string): SummaryController {
   const [summary, setSummary] = useState<SummaryResult | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestRef = useRef<string | null>(null)
 
-  const fresh = summary !== null && tasks !== null && summary.tasksFingerprint === tasksFingerprint(tasks)
+  const fresh =
+    summary !== null &&
+    tasks !== null &&
+    dateKeyFromIso(summary.generatedAt) === today &&
+    summary.tasksFingerprint === tasksFingerprint(tasks)
 
   const generate = useCallback((): void => {
     const requestId = crypto.randomUUID()

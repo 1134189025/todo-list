@@ -7,6 +7,11 @@ import './AiServiceForm.css'
 
 type Feedback = { tone: 'ok' | 'error'; text: string } | null
 
+function keyHint(ai: PublicSettings['ai']): string {
+  if (ai.keyUnreadable) return '已保存的 Key 无法解密（可能换了电脑或系统账户），请重新填写'
+  return ai.hasApiKey ? '已保存，留空表示不修改' : '还没有保存 Key'
+}
+
 type AiServiceFormProps = {
   ai: PublicSettings['ai']
   encryptionAvailable: boolean
@@ -113,8 +118,8 @@ export function AiServiceForm({ ai, encryptionAvailable, actions }: AiServiceFor
           onChange={(event) => setApiKey(event.target.value)}
         />
         <div className="ai-form-key-row">
-          <span className="ai-form-hint">{ai.hasApiKey ? '已保存，留空表示不修改' : '还没有保存 Key'}</span>
-          {ai.hasApiKey && (
+          <span className={ai.keyUnreadable ? 'ai-form-hint is-error' : 'ai-form-hint'}>{keyHint(ai)}</span>
+          {(ai.hasApiKey || ai.keyUnreadable) && (
             <button type="button" className="settings-button" disabled={busy} onClick={() => void handleClearKey()}>
               清除
             </button>

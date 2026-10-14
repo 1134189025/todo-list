@@ -1,0 +1,206 @@
+/* 悬浮窗：无边框小窗口，整块是内容层颜色；顶部一条可拖动的标题栏，固定后不能拖。 */
+.float {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.float-head {
+  -webkit-app-region: drag;
+  flex: none;
+  height: 40px;
+  padding: 0 6px 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.float.is-locked .float-head {
+  -webkit-app-region: no-drag;
+}
+
+.float-title {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 17px;
+  color: var(--color-ink);
+}
+
+.float-count {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.float-actions {
+  -webkit-app-region: no-drag;
+  flex: none;
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+
+.float-action {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--color-ink-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.float-action:hover {
+  background: var(--color-caption-hover);
+  color: var(--color-ink);
+}
+
+.float-action[aria-pressed='true'] {
+  background: var(--color-mint-soft);
+  color: var(--color-leaf-line);
+}
+
+.float-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 8px 4px;
+}
+
+.float-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.float-item {
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 8px 4px 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-row);
+}
+
+.float-item:hover {
+  background: var(--color-card);
+}
+
+.float-check {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.float-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.6px solid var(--color-mint-deep);
+  color: var(--color-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.float-item.is-done .float-circle {
+  background: var(--color-mint-deep);
+}
+
+.float-item-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.float-item.is-done .float-item-title {
+  color: var(--color-ink-disabled);
+  text-decoration: line-through;
+}
+
+.float-when {
+  flex: none;
+  max-width: 45%;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.float-when.is-overdue {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-peach);
+  color: var(--color-peach-text);
+}
+
+.float-empty {
+  margin: 12px 8px;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+  text-align: center;
+}
+
+.float-error {
+  flex: none;
+  margin: 0 10px 6px;
+  font-size: 12px;
+  color: var(--color-danger);
+  overflow-wrap: anywhere;
+}
+
+.float-add {
+  flex: none;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.float-input {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  outline: none;
+  background: var(--color-card);
+  font-size: 13px;
+}
+
+.float-input:focus {
+  border-color: var(--color-mint-deep);
+  box-shadow: 0 0 0 1px var(--color-mint-deep);
+}
+
+.float-input::placeholder {
+  color: var(--color-placeholder);
+}

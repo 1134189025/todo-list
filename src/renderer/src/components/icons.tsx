@@ -159,3 +159,50 @@ export function RefreshIcon(props: IconProps) {
     </Icon>
   )
 }
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon strokeWidth={2.2} {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Icon>
+  )
+}
+
+/** 悬浮窗：大框里一个小框。 */
+export function FloatIcon(props: IconProps) {
+  return (
+    <Icon strokeWidth={1.7} {...props}>
+      <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+      <rect x="12" y="11" width="6" height="5" rx="1" />
+    </Icon>
+  )
+}
+
+/** 置顶：图钉。 */
+export function PinIcon(props: IconProps) {
+  return (
+    <Icon strokeWidth={1.8} {...props}>
+      <path d="M9 4h6M10 4v5.5L7 13h10l-3-3.5V4M12 13v7" />
+    </Icon>
+  )
+}
+
+/** 固定：锁。 */
+export function LockIcon(props: IconProps) {
+  return (
+    <Icon strokeWidth={1.8} {...props}>
+      <rect x="5.5" y="10.5" width="13" height="9.5" rx="2" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
+    </Icon>
+  )
+}
+
+/** 打开主窗口：向右上的箭头出框。 */
+export function OpenMainIcon(props: IconProps) {
+  return (
+    <Icon strokeWidth={1.8} {...props}>
+      <path d="M13 4.5h6.5V11M19.5 4.5L11 13" />
+      <path d="M17 14v3.5a2 2 0 0 1-2 2H6.5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2H10" />
+    </Icon>
+  )
+}

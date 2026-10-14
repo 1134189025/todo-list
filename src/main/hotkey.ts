@@ -3,9 +3,14 @@ import { IPC, type HotkeyStatus, type Result } from '@shared/api'
 import { fail, ok } from '@shared/result'
 import { isSandbox } from './sandbox'
 
+/** 某一时刻真正注册着的组合和状态，用来在保存设置失败时原样恢复。 */
+export type HotkeySnapshot = { registered: string | null; state: HotkeyStatus }
+
 export type HotkeyManager = {
   start(accelerator: string | null): void
   change(accelerator: string | null): Result<null>
+  snapshot(): HotkeySnapshot
+  restore(snapshot: HotkeySnapshot): void
   status(): HotkeyStatus
   unregisterAll(): void
 }
@@ -71,6 +76,17 @@ export function createHotkeyManager(getWindow: () => BrowserWindow | null): Hotk
       registered = accelerator
       state = 'registered'
       return ok(null)
+    },
+    snapshot(): HotkeySnapshot {
+      return { registered, state }
+    },
+    restore(snapshot: HotkeySnapshot): void {
+      if (isSandbox) return
+      if (snapshot.registered !== registered) {
+        unregisterCurrent()
+        if (snapshot.registered !== null && tryRegister(snapshot.registered)) registered = snapshot.registered
+      }
+      state = snapshot.registered !== null && registered === null ? 'failed' : snapshot.state
     },
     status(): HotkeyStatus {
       return isSandbox ? 'sandbox' : state

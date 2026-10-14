@@ -3,7 +3,7 @@ import type { Task } from '@shared/types'
 import { TITLE_MAX, truncateTitle } from '@shared/text'
 import { AiCard } from './components/AiCard'
 import { AppShell } from './components/AppShell'
-import { Composer, type SubmitMode } from './components/Composer'
+import { Composer, type ComposerMode, type ComposerWhen, type SubmitMode } from './components/Composer'
 import { Dialog } from './components/Dialog'
 import { Notice } from './components/Notice'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -13,7 +13,7 @@ import { TitleBar } from './components/TitleBar'
 import { Toast } from './components/Toast'
 import { VoiceNotice } from './components/VoiceNotice'
 import { isAiConfigured } from './lib/aiForm'
-import { createTodayTask, restoreAt, toggleDone, withoutIds } from './lib/taskOps'
+import { createTask, restoreAt, toggleDone, withoutIds } from './lib/taskOps'
 import { type TabKey } from './lib/taskView'
 import { useAiFlow } from './state/useAiFlow'
 import { useSettings } from './state/useSettings'
@@ -22,6 +22,8 @@ import { useTasks } from './state/useTasks'
 import { useToast } from './state/useToast'
 import { useToday } from './state/useToday'
 import { useVoice } from './state/useVoice'
+
+const NO_WHEN: ComposerWhen = { date: null, time: null }
 
 // 计划 3.3：整个文件损坏是「数据文件损坏」；只跳过部分条目是「有 N 条…已跳过」。
 function dataNotice(backup: string | null, skipped: number): string {
@@ -41,11 +43,16 @@ export function App() {
   const [tab, setTab] = useState<TabKey>('today')
   const [doneOpen, setDoneOpen] = useState(false)
   const [summaryOpen, setSummaryOpen] = useState(false)
+  // null = 还没手动选过：配置了 AI 默认「AI 整理」，没配置默认「手动添加」。
+  const [chosenMode, setChosenMode] = useState<ComposerMode | null>(null)
+  const [when, setWhen] = useState<ComposerWhen>(NO_WHEN)
   const fallbackHinted = useRef(false)
 
   const list = tasks.tasks
   const configured = isAiConfigured(settings.settings)
   const accelerator = settings.settings === null ? null : settings.settings.voiceHotkey.accelerator
+  const composerMode: ComposerMode = chosenMode ?? (configured ? 'ai' : 'manual')
+  const floatOpen = settings.settings?.floatWindow.open ?? false
 
   function addTasks(created: Task[], message: string): void {
     const current = tasks.snapshot()
@@ -56,7 +63,7 @@ export function App() {
 
   const aiFlow = useAiFlow({ addTasks, restoreDraft: setDraft })
   const voice = useVoice(accelerator, settingsOpen || aiFlow.stage.kind !== 'idle')
-  const summary = useSummary(list)
+  const summary = useSummary(list, today)
 
   useEffect(() => window.api.events.onSummaryShow((shown) => {
     summary.receive(shown)
@@ -85,8 +92,15 @@ export function App() {
     const title = truncateTitle(script)
     const fallback = mode === 'ai' && !fallbackHinted.current
     if (fallback) fallbackHinted.current = true
-    addTasks([createTodayTask(title, new Date().toISOString())], '已添加 1 件待办')
+    // 手动添加用输入区选的日期和时间；AI 没配置时的直接添加算今天。
+    const picked = mode === 'direct' ? when : NO_WHEN
+    const created = createTask(
+      { title, dueDate: picked.date, dueTime: picked.date === null ? null : picked.time, source: 'manual' },
+      new Date().toISOString()
+    )
+    addTasks([created], '已添加 1 件待办')
     setDraft('')
+    setWhen(NO_WHEN)
     if (fallback) setNotice('还没配置 AI，已直接添加')
     else if (title.length < script.length) setNotice(`待办最多 ${TITLE_MAX} 字，超出的部分没有保存`)
     else setNotice(null)
@@ -112,6 +126,10 @@ export function App() {
     )
   }
 
+  function toggleFloat(): void {
+    void settings.save({ floatWindow: { open: !floatOpen } })
+  }
+
   const summaryHeadline = summary.fresh && summary.summary !== null ? summary.summary.headline : null
 
   const main =
@@ -121,6 +139,7 @@ export function App() {
       </Notice>
     ) : (
       <>
+        {settings.loadError !== null && <Notice tone="danger">{`无法读取设置：${settings.loadError}`}</Notice>}
         {(tasks.corruptBackup !== null || tasks.skipped > 0) && (
           <Notice tone="peach" onDismiss={tasks.dismissCorruptNotice}>
             {dataNotice(tasks.corruptBackup, tasks.skipped)}
@@ -157,10 +176,15 @@ export function App() {
           notice={notice}
           voiceShortcut={accelerator}
           disabled={list === null}
+          mode={composerMode}
+          when={when}
+          today={today}
           onChange={(value) => {
             setDraft(value)
             setNotice(null)
           }}
+          onModeChange={setChosenMode}
+          onWhenChange={setWhen}
           onSubmit={submitDraft}
           onVoice={voice.openVoice}
         />
@@ -185,7 +209,7 @@ export function App() {
 
   return (
     <>
-      <TitleBar onOpenSettings={() => setSettingsOpen(true)} />
+      <TitleBar floatOpen={floatOpen} onToggleFloat={toggleFloat} onOpenSettings={() => setSettingsOpen(true)} />
       <AppShell main={main} composer={composer} drawer={drawer} drawerLabel="AI 今日总结" />
       <Dialog open={settingsOpen} title="设置" onRequestClose={() => setSettingsOpen(false)}>
         {settingsOpen ? (

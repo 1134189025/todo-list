@@ -1,5 +1,5 @@
 import type { Result, SummaryResult } from '@shared/api'
-import { isInLaterList, isInTodayList, sortOpenTasks, toDateKey } from '@shared/dates'
+import { isInLaterList, isInTodayList, isOverdue, sortLaterOpenTasks, sortOpenTasks, toDateKey } from '@shared/dates'
 import { fail, ok } from '@shared/result'
 import { tasksFingerprint } from '@shared/fingerprint'
 import type { Task } from '@shared/types'
@@ -14,39 +14,79 @@ const HEADLINE_MAX = 40
 const OVERVIEW_MAX = 200
 const REASON_MAX = 30
 const UPCOMING_DAYS = 7
-const MAX_PROMPT_TASKS = 150
+const MAX_OPEN_TASKS = 100
+const MAX_DONE_TASKS = 30
+const MAX_UPCOMING_TASKS = 20
 const BAD_REPLY_MESSAGE = 'AI 返回的内容看不懂'
 
-type ListName = 'today' | 'later'
-type PromptTask = {
-  id: string
-  title: string
-  list: ListName
-  done: boolean
-  date: string | null
-  time: string | null
-}
-
-function toPromptTask(task: Task, list: ListName): PromptTask {
-  return { id: task.id, title: task.title, list, done: task.done, date: task.dueDate, time: task.dueTime }
-}
+// openToday 是今天全部未完成（排好序）；提示词里只编号前 MAX_OPEN_TASKS 条。
+type PromptData = { text: string; count: number; openToday: Task[] }
 
 function readText(value: unknown, max: number): string {
   return typeof value === 'string' ? truncateText(value.trim(), max) : ''
 }
 
-// 只保留今天未完成里的 id，去重；没被提到的按本地排序补在最后，reason 为空。
+// 标题里的换行、制表符压成一个空格，一条待办只占一行。
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function shortDate(dateKey: string): string {
+  return dateKey.slice(5)
+}
+
+function openTodayLine(task: Task, index: number, today: string): string {
+  const notes: string[] = []
+  if (isOverdue(task, today) && task.dueDate !== null) notes.push(`已过期 ${shortDate(task.dueDate)}`)
+  if (task.dueTime !== null) notes.push(task.dueTime)
+  const suffix = notes.length === 0 ? '' : `（${notes.join(' ')}）`
+  return `${index + 1}. ${oneLine(task.title)}${suffix}`
+}
+
+function upcomingItem(task: Task): string {
+  const when = [task.dueDate === null ? '' : shortDate(task.dueDate), task.dueTime ?? ''].filter(Boolean).join(' ')
+  return `${when} ${oneLine(task.title)}`
+}
+
+// 用紧凑的纯文本代替 JSON：今天未完成用 1、2、3 编号（AI 只回编号，比回完整 id 短得多），
+// 已完成和之后的只列标题，不需要编号。
+function buildPromptData(snapshot: Task[], now: Date): PromptData {
+  const today = toDateKey(now)
+  const upcomingLimit = toDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + UPCOMING_DAYS))
+  const openToday = sortOpenTasks(
+    snapshot.filter((task) => !task.done && isInTodayList(task, today)),
+    today
+  )
+  const numbered = openToday.slice(0, MAX_OPEN_TASKS)
+  const doneToday = snapshot.filter((task) => task.done && isInTodayList(task, today)).slice(0, MAX_DONE_TASKS)
+  const upcoming = sortLaterOpenTasks(
+    snapshot.filter(
+      (task) => !task.done && isInLaterList(task, today) && task.dueDate !== null && task.dueDate <= upcomingLimit
+    )
+  ).slice(0, MAX_UPCOMING_TASKS)
+
+  const lines = [
+    '今天未完成：',
+    ...(numbered.length === 0 ? ['无'] : numbered.map((task, index) => openTodayLine(task, index, today))),
+    `今天已完成：${doneToday.length === 0 ? '无' : doneToday.map((task) => oneLine(task.title)).join('；')}`,
+    `之后 ${UPCOMING_DAYS} 天：${upcoming.length === 0 ? '无' : upcoming.map(upcomingItem).join('；')}`
+  ]
+  return { text: lines.join('\n'), count: numbered.length + doneToday.length + upcoming.length, openToday }
+}
+
+// AI 回的是编号：只认今天未完成里的编号，去重；没被提到的按本地排序补在最后，reason 为空。
 function buildOrder(openToday: Task[], raw: unknown): SummaryResult['order'] {
-  const allowed = new Set(openToday.map((task) => task.id))
   const seen = new Set<string>()
   const order: SummaryResult['order'] = []
   const entries: unknown[] = Array.isArray(raw) ? raw : []
   for (const entry of entries) {
-    if (!isRecord(entry) || typeof entry.id !== 'string') continue
-    const id = entry.id
-    if (!allowed.has(id) || seen.has(id)) continue
-    seen.add(id)
-    order.push({ id, reason: readText(entry.reason, REASON_MAX) })
+    if (!isRecord(entry)) continue
+    const number = typeof entry.id === 'number' ? entry.id : typeof entry.id === 'string' ? Number(entry.id.trim()) : NaN
+    if (!Number.isInteger(number) || number < 1 || number > MAX_OPEN_TASKS) continue
+    const task = openToday[number - 1]
+    if (task === undefined || seen.has(task.id)) continue
+    seen.add(task.id)
+    order.push({ id: task.id, reason: readText(entry.reason, REASON_MAX) })
   }
   for (const task of openToday) {
     if (!seen.has(task.id)) order.push({ id: task.id, reason: '' })
@@ -61,29 +101,10 @@ export async function summarizeTasks(
   kind: SummaryKind
 ): Promise<Result<SummaryResult>> {
   const now = new Date()
-  const today = toDateKey(now)
   const snapshot = tasks.snapshot()
-  const upcomingLimit = toDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + UPCOMING_DAYS))
+  const prompt = buildPromptData(snapshot, now)
 
-  const todayOpen = sortOpenTasks(
-    snapshot.filter((task) => !task.done && isInTodayList(task, today)),
-    today
-  )
-  const todayDone = snapshot.filter((task) => task.done && isInTodayList(task, today))
-  const upcoming = snapshot.filter(
-    (task) => !task.done && isInLaterList(task, today) && task.dueDate !== null && task.dueDate <= upcomingLimit
-  )
-  const promptTasks: PromptTask[] = [
-    ...todayOpen.map((task) => toPromptTask(task, 'today')),
-    ...todayDone.map((task) => toPromptTask(task, 'today')),
-    ...upcoming.map((task) => toPromptTask(task, 'later'))
-  ].slice(0, MAX_PROMPT_TASKS)
-
-  const reply = await completeChat(
-    settings,
-    { kind, requestId },
-    buildSummaryMessages(JSON.stringify({ today, tasks: promptTasks }), now)
-  )
+  const reply = await completeChat(settings, { kind, requestId }, buildSummaryMessages(prompt.text, now))
   if (!reply.ok) return reply
   const json = extractJsonObject(reply.data)
   if (!json.ok) return json
@@ -93,9 +114,9 @@ export async function summarizeTasks(
   return ok({
     headline,
     overview: readText(json.data.overview, OVERVIEW_MAX),
-    order: buildOrder(todayOpen, json.data.order),
+    order: buildOrder(prompt.openToday, json.data.order),
     generatedAt: new Date().toISOString(),
-    basedOnCount: promptTasks.length,
+    basedOnCount: prompt.count,
     tasksFingerprint: tasksFingerprint(snapshot)
   })
 }
