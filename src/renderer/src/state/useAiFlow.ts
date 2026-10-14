@@ -17,8 +17,8 @@ import { type DraftItem, type DraftPatch, draftToTask, pickableItems, toDraftIte
 import { createTask, restoreAt, withoutIds } from '../lib/taskOps'
 import type { TasksController } from './useTasks'
 
-/** 已经直接执行的改动和提示文字。 */
-export type Applied = { message: string; changes: TaskChange[] }
+/** 已经直接执行的改动和提示文字；id 用来在用户从提示条撤销后把它从卡片上去掉。 */
+export type Applied = { id: string; message: string; changes: TaskChange[] }
 
 export type AiStage =
   | { kind: 'idle' }
@@ -86,6 +86,22 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
     void callApi(() => window.api.ai.cancel(requestId))
   }
 
+  // 用户从提示条撤销了直接执行的部分：卡片上不再提它，执行时也不再连带撤销、不再说「另有 N 项」。
+  function forgetApplied(id: string): void {
+    setStage((current) =>
+      (current.kind === 'confirm' || current.kind === 'unmatched') && current.applied?.id === id
+        ? { ...current, applied: null }
+        : current
+    )
+  }
+
+  function undoApplied(applied: Applied): (now: Task[]) => Task[] {
+    return (now) => {
+      forgetApplied(applied.id)
+      return revertChanges(now, applied.changes)
+    }
+  }
+
   // 直接执行的部分作用在收到结果时的当前列表上；什么都没改时返回 null。
   function applyDirect(result: AiCommandResult): Applied | null {
     const current = tasks.snapshot()
@@ -93,14 +109,14 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
     const direct = result.actions.filter(isDirectAction)
     const { next, changes } = applyDirectActions(current, direct, new Date().toISOString(), today)
     if (changes.length === 0) return null
-    const message = changesMessage(changes, today)
-    tasks.replaceWithUndo(next, message, (now) => revertChanges(now, changes))
-    return { message, changes }
+    const applied: Applied = { id: crypto.randomUUID(), message: changesMessage(changes, today), changes }
+    tasks.replaceWithUndo(next, applied.message, undoApplied(applied))
+    return applied
   }
 
-  // 关掉确认 / 提示卡片时，直接执行的那部分可能已经过了提示条的 5 秒：再给一次撤销的机会。
+  // 关掉确认 / 提示卡片时，直接执行的那部分可能已经过了提示条的 5 秒：再给一次撤销的机会（已经撤销过就不再给）。
   function reofferApplied(applied: Applied | null): void {
-    if (applied !== null) tasks.offerUndo(applied.message, (now) => revertChanges(now, applied.changes))
+    if (applied !== null) tasks.offerUndo(applied.message, undoApplied(applied))
   }
 
   function receive(script: string, result: AiCommandResult): void {
@@ -206,6 +222,12 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
     const created: Task[] = pickableItems(stage.items).map((item) => draftToTask(item, nowIso))
     const deleteIds = new Set(stage.deletes.filter((item) => item.include).map((item) => item.taskId))
     const { next, removed } = removeTasks(current, deleteIds)
+    // 要删的已经被别处删掉、也没有新建：什么都不用做，只把直接执行那部分的撤销再给一次。
+    if (created.length === 0 && removed.length === 0) {
+      reofferApplied(stage.applied)
+      setStage({ kind: 'idle' })
+      return
+    }
     const createdIds = new Set(created.map((task) => task.id))
     const directChanges = stage.applied?.changes ?? []
     const extra = directChanges.length === 0 ? '' : `，另有 ${directChanges.length} 项已直接处理`

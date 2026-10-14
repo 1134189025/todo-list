@@ -53,7 +53,7 @@ export function buildCommandMessages(tasksText: string, text: string, now: Date)
     '{"op":"delete","id":1} 删除',
     '{"op":"unknown","text":"说法"} 用户提到的待办在列表里对不上',
     `规则：只用列表里的编号，对不上或拿不准就用 unknown，不要猜；「做完了」用 complete，不要 delete；新的事情用 add，title 不超过 30 字、不含日期时间词，没说日期时 date 和 time 都写 null；不编造；最多 ${COMMAND_ACTION_LIMIT} 项；什么都不用做就输出 {"actions":[]}。`,
-    `例：待办 1. 写周报（今天 10:00） 2. 开会（10-16）；用户说「周报写完了，会改到明天下午三点，再买个牛奶」→ {"actions":[{"op":"complete","id":1},{"op":"reschedule","id":2,"date":"${tomorrow}","time":"15:00"},{"op":"add","title":"买牛奶","date":null,"time":null}]}`,
+    `例：待办 1. "写周报"（今天 10:00） 2. "开会"（10-16）；用户说「周报写完了，会改到明天下午三点，再买个牛奶」→ {"actions":[{"op":"complete","id":1},{"op":"reschedule","id":2,"date":"${tomorrow}","time":"15:00"},{"op":"add","title":"买牛奶","date":null,"time":null}]}`,
     NO_THINK
   ].join('\n')
   return [

@@ -18,7 +18,7 @@ import type { TasksStore } from '../store/tasksStore'
 import { completeChat } from './client'
 import { extractJsonObject, sanitizeItem, truncateText } from './parse'
 import { buildCommandMessages, COMMAND_ACTION_LIMIT } from './prompts'
-import { oneLine, readNumber, shortDate } from './taskText'
+import { oneLine, quoted, readNumber, shortDate } from './taskText'
 
 const MAX_OPEN_LISTED = 100
 const MAX_DONE_LISTED = 20
@@ -48,7 +48,7 @@ function describe(task: Task, today: string): string {
 
 function candidatesText(candidates: Task[], today: string): string {
   if (candidates.length === 0) return '无'
-  return candidates.map((task, index) => `${index + 1}. ${oneLine(task.title)}（${describe(task, today)}）`).join('\n')
+  return candidates.map((task, index) => `${index + 1}. ${quoted(task.title)}（${describe(task, today)}）`).join('\n')
 }
 
 // reschedule 的一个字段：没写 = 不改（undefined）；null = 清掉；格式不对也当没写。

@@ -14,6 +14,14 @@ export type DeleteDraft = { key: string; taskId: string; title: string; include:
 
 const CHANGE_FIELDS = ['title', 'done', 'dueDate', 'dueTime', 'completedAt'] as const
 
+// 撤销时成组处理的字段：完成状态和完成时间、日期和时间要一起改回去，不能只改回一半，
+// 否则会出现「未完成却有完成时间」「没日期却有时间」这样的任务。
+const FIELD_GROUPS: readonly (readonly (typeof CHANGE_FIELDS)[number][])[] = [
+  ['title'],
+  ['done', 'completedAt'],
+  ['dueDate', 'dueTime']
+]
+
 export function isDirectAction(action: AiAction): action is DirectAction {
   return action.op !== 'add' && action.op !== 'delete'
 }
@@ -69,7 +77,7 @@ export function applyDirectActions(
   return { next, changes }
 }
 
-/** 撤销直接操作：倒着改回去，只改这次动过、且之后没被别处改过的字段。 */
+/** 撤销直接操作：倒着改回去。按字段组处理：这次动过、且整组之后都没被别处改过的才改回去。 */
 export function revertChanges(tasks: readonly Task[], changes: readonly TaskChange[]): Task[] {
   const next = [...tasks]
   for (const change of [...changes].reverse()) {
@@ -77,10 +85,11 @@ export function revertChanges(tasks: readonly Task[], changes: readonly TaskChan
     const current = next[index]
     if (current === undefined) continue
     const restored: Task = { ...current }
-    for (const field of CHANGE_FIELDS) {
-      if (change.before[field] !== change.after[field] && current[field] === change.after[field]) {
-        Object.assign(restored, { [field]: change.before[field] })
-      }
+    for (const group of FIELD_GROUPS) {
+      const touched = group.some((field) => change.before[field] !== change.after[field])
+      const untouchedSince = group.every((field) => current[field] === change.after[field])
+      if (!touched || !untouchedSince) continue
+      for (const field of group) Object.assign(restored, { [field]: change.before[field] })
     }
     next[index] = restored
   }

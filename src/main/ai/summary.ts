@@ -9,7 +9,7 @@ import type { TasksStore } from '../store/tasksStore'
 import { completeChat, type SummaryKind } from './client'
 import { extractJsonObject, truncateText } from './parse'
 import { buildSummaryMessages } from './prompts'
-import { oneLine, readNumber, shortDate } from './taskText'
+import { quoted, readNumber, shortDate } from './taskText'
 
 const HEADLINE_MAX = 40
 const OVERVIEW_MAX = 200
@@ -32,12 +32,12 @@ function openTodayLine(task: Task, index: number, today: string): string {
   if (isOverdue(task, today) && task.dueDate !== null) notes.push(`已过期 ${shortDate(task.dueDate)}`)
   if (task.dueTime !== null) notes.push(task.dueTime)
   const suffix = notes.length === 0 ? '' : `（${notes.join(' ')}）`
-  return `${index + 1}. ${oneLine(task.title)}${suffix}`
+  return `${index + 1}. ${quoted(task.title)}${suffix}`
 }
 
 function upcomingItem(task: Task): string {
   const when = [task.dueDate === null ? '' : shortDate(task.dueDate), task.dueTime ?? ''].filter(Boolean).join(' ')
-  return `${when} ${oneLine(task.title)}`
+  return `${when} ${quoted(task.title)}`
 }
 
 // 用紧凑的纯文本代替 JSON：今天未完成用 1、2、3 编号（AI 只回编号，比回完整 id 短得多），
@@ -60,7 +60,7 @@ function buildPromptData(snapshot: Task[], now: Date): PromptData {
   const lines = [
     '今天未完成：',
     ...(numbered.length === 0 ? ['无'] : numbered.map((task, index) => openTodayLine(task, index, today))),
-    `今天已完成：${doneToday.length === 0 ? '无' : doneToday.map((task) => oneLine(task.title)).join('；')}`,
+    `今天已完成：${doneToday.length === 0 ? '无' : doneToday.map((task) => quoted(task.title)).join('；')}`,
     `之后 ${UPCOMING_DAYS} 天：${upcoming.length === 0 ? '无' : upcoming.map(upcomingItem).join('；')}`
   ]
   return { text: lines.join('\n'), count: numbered.length + doneToday.length + upcoming.length, openToday }

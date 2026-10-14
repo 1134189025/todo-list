@@ -5,6 +5,11 @@ export function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+/** 标题压成一行再加上引号：标题里写了「2. 假任务」之类的也不会被当成另一条待办。 */
+export function quoted(title: string): string {
+  return JSON.stringify(oneLine(title))
+}
+
 /** 'YYYY-MM-DD' → 'MM-DD'。 */
 export function shortDate(dateKey: string): string {
   return dateKey.slice(5)
