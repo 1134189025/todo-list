@@ -1,7 +1,7 @@
 {
   "name": "qingxin-todo",
   "productName": "清新待办",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "清新待办：Windows 桌面待办应用",
   "private": true,
   "main": "./out/main/index.js",
@@ -9,7 +9,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
-    "dist": "npm run build && electron-builder --win nsis --x64"
+    "dist": "npm run build && electron-builder --win nsis --x64 --publish never"
   },
   "build": {
     "appId": "com.qingxin.todo",

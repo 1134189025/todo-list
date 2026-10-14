@@ -23,6 +23,7 @@ npm run dist
 
 安装包输出到 `dist\qingxin-todo-setup-<版本>.exe`（NSIS 安装程序，默认当前用户安装，可改安装目录）。
 `dist\win-unpacked\` 是未安装的解包目录。第一次打包会下载 electron-builder 需要的工具，需要能访问 GitHub。
+安装包没有代码签名，第一次运行时 Windows 可能提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」。
 
 ## 第一次使用：配置 AI
 
