@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { createFloatWindowManager } from './floatWindow'
 import { createHotkeyManager } from './hotkey'
 import { broadcastSettings, registerIpcHandlers } from './ipc'
+import { restrictPermissions } from './permissions'
 import { startScheduler } from './scheduler'
 import { configureSandbox } from './sandbox'
 import { createSettingsService } from './settingsService'
@@ -22,6 +23,7 @@ function focusMainWindow(): void {
 }
 
 async function start(): Promise<void> {
+  restrictPermissions()
   const userData = app.getPath('userData')
   let tray: TrayController | null = null
   const hotkey = createHotkeyManager(() => mainWindow)

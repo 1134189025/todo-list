@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { PublicSettings } from '@shared/api'
+import type { AiApiFormat, PublicSettings } from '@shared/api'
 import { callApi } from '../lib/callApi'
 import { checkAiDraft } from '../lib/aiForm'
 import type { SettingsActions } from '../state/useSettings'
@@ -12,6 +12,21 @@ function keyHint(ai: PublicSettings['ai']): string {
   return ai.hasApiKey ? '已保存，留空表示不修改' : '还没有保存 Key'
 }
 
+const FORMATS: { value: AiApiFormat; label: string; placeholder: string; modelHint: string }[] = [
+  {
+    value: 'openai',
+    label: 'OpenAI 兼容（地址后接 /chat/completions）',
+    placeholder: 'https://api.example.com/v1',
+    modelHint: '例如 gpt-4o-mini'
+  },
+  {
+    value: 'gemini',
+    label: 'Gemini 原生（地址后接 /v1beta/models/模型:generateContent，支持语音）',
+    placeholder: 'https://你的地址/antigravity',
+    modelHint: '例如 gemini-3.8-flash'
+  }
+]
+
 type AiServiceFormProps = {
   ai: PublicSettings['ai']
   encryptionAvailable: boolean
@@ -21,13 +36,15 @@ type AiServiceFormProps = {
 export function AiServiceForm({ ai, encryptionAvailable, actions }: AiServiceFormProps) {
   const [baseUrl, setBaseUrl] = useState(ai.baseUrl)
   const [model, setModel] = useState(ai.model)
+  const [apiFormat, setApiFormat] = useState<AiApiFormat>(ai.apiFormat)
+  const format = FORMATS.find((item) => item.value === apiFormat) ?? FORMATS[0]
   const [apiKey, setApiKey] = useState('')
   const [busy, setBusy] = useState(false)
   const [saveFeedback, setSaveFeedback] = useState<Feedback>(null)
   const [testFeedback, setTestFeedback] = useState<Feedback>(null)
 
   async function handleSave(): Promise<void> {
-    const draft = checkAiDraft(baseUrl, model)
+    const draft = checkAiDraft(baseUrl, model, apiFormat)
     if (!draft.ok) {
       setSaveFeedback({ tone: 'error', text: draft.message })
       return
@@ -46,7 +63,7 @@ export function AiServiceForm({ ai, encryptionAvailable, actions }: AiServiceFor
   }
 
   async function handleTest(): Promise<void> {
-    const draft = checkAiDraft(baseUrl, model)
+    const draft = checkAiDraft(baseUrl, model, apiFormat)
     if (!draft.ok) {
       setTestFeedback({ tone: 'error', text: draft.message })
       return
@@ -74,6 +91,23 @@ export function AiServiceForm({ ai, encryptionAvailable, actions }: AiServiceFor
   return (
     <div className="ai-form">
       <div className="ai-form-field">
+        <label htmlFor="ai-format" className="ai-form-label">
+          接口格式
+        </label>
+        <select
+          id="ai-format"
+          className="settings-input"
+          value={apiFormat}
+          onChange={(event) => setApiFormat(event.target.value === 'gemini' ? 'gemini' : 'openai')}
+        >
+          {FORMATS.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="ai-form-field">
         <label htmlFor="ai-base-url" className="ai-form-label">
           地址
         </label>
@@ -84,7 +118,7 @@ export function AiServiceForm({ ai, encryptionAvailable, actions }: AiServiceFor
           inputMode="url"
           autoComplete="off"
           spellCheck={false}
-          placeholder="https://api.example.com/v1"
+          placeholder={format?.placeholder}
           value={baseUrl}
           onChange={(event) => setBaseUrl(event.target.value)}
         />
@@ -99,7 +133,7 @@ export function AiServiceForm({ ai, encryptionAvailable, actions }: AiServiceFor
           type="text"
           autoComplete="off"
           spellCheck={false}
-          placeholder="例如 gpt-4o-mini"
+          placeholder={format?.modelHint}
           value={model}
           onChange={(event) => setModel(event.target.value)}
         />

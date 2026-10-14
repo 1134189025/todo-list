@@ -1,4 +1,4 @@
-import type { FloatWindowSettings, SettingsPatch } from './api'
+import type { AiApiFormat, CommandInput, FloatWindowSettings, SettingsPatch, VoiceClip } from './api'
 import { TASK_FIELDS, type TaskFields, type TaskPatch } from './taskPatch'
 import { isDateKey, isIsoTimestamp, isTimeKey } from './dates'
 import { TITLE_MAX } from './text'
@@ -154,7 +154,10 @@ export function validateSettingsPatch(value: unknown): Validation<SettingsPatch>
     if (!baseUrl.ok) return invalid(baseUrl.message)
     const model = validateModel(value.ai.model)
     if (!model.ok) return invalid(model.message)
+    const apiFormat = validateApiFormat(value.ai.apiFormat)
+    if (!apiFormat.ok) return invalid(apiFormat.message)
     patch.ai = { baseUrl: baseUrl.value, model: model.value }
+    if (apiFormat.value !== undefined) patch.ai.apiFormat = apiFormat.value
   }
   if (value.autoSummary !== undefined) {
     const autoSummary = value.autoSummary
@@ -217,13 +220,43 @@ export function validateRequestId(value: unknown): Validation<string> {
   return valid(requestId)
 }
 
-export function validateCommandRequest(value: unknown): Validation<{ requestId: string; text: string }> {
+// 录音上限：base64 约 4 MB（16 kHz 单声道 16 位约 90 秒），只收 WAV。
+const VOICE_BASE64_MAX = 4_000_000
+const VOICE_SECONDS_MAX = 90
+const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/
+
+function validateVoiceClip(value: unknown): Validation<VoiceClip> {
+  if (!isRecord(value) || value.mimeType !== 'audio/wav') return invalid('录音格式不正确')
+  const { data, seconds } = value
+  if (typeof data !== 'string' || data.length === 0 || data.length > VOICE_BASE64_MAX || !BASE64_PATTERN.test(data)) {
+    return invalid('录音数据不正确或太长')
+  }
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0 || seconds > VOICE_SECONDS_MAX) {
+    return invalid('录音时长不正确')
+  }
+  return valid({ mimeType: 'audio/wav', data, seconds })
+}
+
+export function validateApiFormat(value: unknown): Validation<AiApiFormat | undefined> {
+  if (value === undefined) return valid(undefined)
+  if (value === 'openai' || value === 'gemini') return valid(value)
+  return invalid('AI 接口格式不正确')
+}
+
+/** 打字和录音二选一。 */
+export function validateCommandRequest(value: unknown): Validation<{ requestId: string; input: CommandInput }> {
   if (!isRecord(value)) return invalid('请求格式不正确')
   const requestId = validateRequestId(value.requestId)
   if (!requestId.ok) return invalid(requestId.message)
+  if (value.audio !== undefined) {
+    if (value.text !== undefined) return invalid('文字和录音只能二选一')
+    const clip = validateVoiceClip(value.audio)
+    if (!clip.ok) return invalid(clip.message)
+    return valid({ requestId: requestId.value, input: { kind: 'audio', clip: clip.value } })
+  }
   const text = boundedText(value.text, 1, PARSE_TEXT_MAX)
   if (text === null) return invalid('请输入 1–500 个字')
-  return valid({ requestId: requestId.value, text })
+  return valid({ requestId: requestId.value, input: { kind: 'text', text } })
 }
 
 export function validateSummarizeRequest(value: unknown): Validation<{ requestId: string }> {
@@ -233,17 +266,21 @@ export function validateSummarizeRequest(value: unknown): Validation<{ requestId
   return valid({ requestId: requestId.value })
 }
 
-export function validateTestDraft(
-  value: unknown
-): Validation<{ baseUrl: string; model: string; apiKey?: string } | undefined> {
+export type TestDraft = { baseUrl: string; model: string; apiFormat?: AiApiFormat; apiKey?: string }
+
+export function validateTestDraft(value: unknown): Validation<TestDraft | undefined> {
   if (value === undefined) return valid(undefined)
   if (!isRecord(value)) return invalid('测试连接的参数格式不正确')
   const baseUrl = validateBaseUrl(value.baseUrl)
   if (!baseUrl.ok) return invalid(baseUrl.message)
   const model = validateModel(value.model)
   if (!model.ok) return invalid(model.message)
-  if (value.apiKey === undefined) return valid({ baseUrl: baseUrl.value, model: model.value })
+  const apiFormat = validateApiFormat(value.apiFormat)
+  if (!apiFormat.ok) return invalid(apiFormat.message)
+  const draft: TestDraft = { baseUrl: baseUrl.value, model: model.value }
+  if (apiFormat.value !== undefined) draft.apiFormat = apiFormat.value
+  if (value.apiKey === undefined) return valid(draft)
   const apiKey = validateApiKey(value.apiKey)
   if (!apiKey.ok) return invalid(apiKey.message)
-  return valid({ baseUrl: baseUrl.value, model: model.value, apiKey: apiKey.value })
+  return valid({ ...draft, apiKey: apiKey.value })
 }

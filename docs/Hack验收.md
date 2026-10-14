@@ -70,7 +70,7 @@
 本项目真实的危险：
 - **用户的真实数据**：应用正常运行时的 userData 目录（`%APPDATA%\` 下以应用名命名的目录，内含 `tasks.json`、`settings.json`，
   后者里有加密的 API Key）。只有带挡板启动时，程序才会改用 `QINGXIN_DATA_DIR`。
-- **外部系统**：AI 服务（用户自己提供的 OpenAI 兼容接口，会产生费用）；开机启动会写注册表 Run 项；系统通知。
+- **外部系统**：AI 服务（用户自己提供的 OpenAI 兼容或 Gemini 原生接口，会产生费用）；麦克风；开机启动会写注册表 Run 项；系统通知。
 - **含密钥的东西**：settings.json 里的 `apiKeyEnc`；用户可能在环境变量或别处放了真实 Key。
 - **用户正在用的程序**：Claude 桌面版、浏览器、编辑器等，其中不少本身就是 Electron（进程名都可能叫 electron 或类似）。
 - `E:\todolist\logs\` 是用户的目录，与本项目代码无关。
@@ -113,8 +113,10 @@ playwright-core 的 `_electron.launch` 在 Electron 44 上会报 "Process failed
 3. 临时脚本里用 playwright-core 的 `_electron.launch({ executablePath: 'E:\\todolist\\node_modules\\electron\\dist\\electron.exe',
    args: ['E:\\todolist'], env: { ...process.env, QINGXIN_SANDBOX: '1', QINGXIN_DATA_DIR: '<临时目录>\\data' } })`，
    拿到窗口后像用户一样点击、输入、按键、调整窗口大小、重载，截图留证。
-4. 需要 AI 时，在临时目录里起一个 Node 小服务（`127.0.0.1` 随机端口，实现 `POST /v1/chat/completions`），按需要返回
-   正常 / 畸形 / 超慢 / 报错的回复；在应用的设置里把地址填成它。
+4. 需要 AI 时，在临时目录里起一个 Node 小服务（`127.0.0.1` 随机端口，实现 `POST /v1/chat/completions`；Gemini 原生格式实现
+   `POST /<前缀>/v1beta/models/<模型>:generateContent`），按需要返回正常 / 畸形 / 超慢 / 报错的回复；在应用的设置里把地址填成它。
+5. 需要麦克风时，启动参数加 `--use-fake-device-for-media-stream --use-file-for-fake-audio-capture=<合成的 wav>`，假麦克风会循环播放
+   这段合成音（自己生成测试音，不用真人录音）。不要加 `--use-fake-ui-for-media-stream`：它会绕过应用自己的权限处理器。
 
 **造数据**：启动前直接往 `<临时目录>\data\tasks.json` 写合成任务（格式见 `docs/初版计划.md` 3.3），同时记下"应该显示成什么"。
 默认就造容易藏 bug 的形态：逾期的、跨午夜的、同一时间并列的、没日期有时间的（非法）、超长标题、emoji / 零宽字符、重复 id、坏 JSON。

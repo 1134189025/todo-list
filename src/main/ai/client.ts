@@ -1,75 +1,76 @@
 import { net } from 'electron'
-import type { Result } from '@shared/api'
+import type { AiApiFormat, Result } from '@shared/api'
 import { fail, ok } from '@shared/result'
-import { isHttpUrl, isRecord } from '@shared/validate'
+import type { TestDraft } from '@shared/validate'
 import { checkSandboxUrl } from '../sandbox'
-import { TEST_MESSAGES } from './prompts'
 import type { SettingsStore } from '../store/settingsStore'
+import { TEST_MESSAGES } from './prompts'
+import {
+  buildRequest,
+  normalizeBaseUrl,
+  readReplyText,
+  type ChatMessage,
+  type ProviderConfig
+} from './providers'
 
-export type ChatMessage = { role: 'system' | 'user'; content: string }
 export type SummaryKind = 'summarize' | 'auto-summary'
 export type RequestKind = 'command' | SummaryKind
 export type Tracking = { kind: RequestKind; requestId: string }
-export type TestDraft = { baseUrl: string; model: string; apiKey?: string }
 
-type ChatConfig = { baseUrl: string; model: string; apiKey: string }
-type ChatRequestBody = { model: string; messages: ChatMessage[]; temperature: number }
 type AbortReason = 'cancelled' | 'timeout'
 type Attempt = { controller: AbortController; reason: AbortReason | null }
 type FetchResponse = Awaited<ReturnType<typeof net.fetch>>
 
 const CHAT_TIMEOUT_MS = 30_000
+// 带录音的请求上传更大、模型要先听写，给长一点。
+const AUDIO_TIMEOUT_MS = 60_000
 const TEST_TIMEOUT_MS = 15_000
 const MAX_RESPONSE_BYTES = 1024 * 1024
-const TEMPERATURE = 0.2
 const NOT_CONFIGURED_MESSAGE = '还没配置 AI 服务'
-const BAD_REPLY_MESSAGE = 'AI 返回的内容看不懂'
 const REDIRECT_MESSAGE = 'AI 服务地址发生了跳转，请填写最终地址'
-const NOT_OPENAI_COMPATIBLE_MESSAGE = '这个地址不像 OpenAI 兼容的 AI 服务'
+const WRONG_FORMAT_MESSAGE: Record<AiApiFormat, string> = {
+  openai: '这个地址不像 OpenAI 兼容的 AI 服务',
+  gemini: '这个地址不像 Gemini 原生接口'
+}
 
 const tracked = new Map<string, { kind: RequestKind; attempt: Attempt }>()
 
-// 去掉结尾的 / 和完整的 /chat/completions，得到 OpenAI 兼容的基础地址。
-function normalizeBaseUrl(raw: string): Result<string> {
-  const trimmed = raw.trim().replace(/\/+$/, '').replace(/\/chat\/completions$/, '').replace(/\/+$/, '')
-  if (!isHttpUrl(trimmed)) return fail('INVALID_INPUT', 'AI 服务地址需要是有效的 http 或 https 地址')
-  return ok(trimmed)
-}
-
-function makeConfig(baseUrl: string, model: string, apiKey: string): Result<ChatConfig> {
-  const normalized = normalizeBaseUrl(baseUrl)
+function makeConfig(apiFormat: AiApiFormat, baseUrl: string, model: string, apiKey: string): Result<ProviderConfig> {
+  const normalized = normalizeBaseUrl(baseUrl, apiFormat)
   if (!normalized.ok) return normalized
-  return ok({ baseUrl: normalized.data, model, apiKey })
+  return ok({ apiFormat, baseUrl: normalized.data, model, apiKey })
 }
 
-function loadChatConfig(settings: SettingsStore): Result<ChatConfig> {
+function loadChatConfig(settings: SettingsStore): Result<ProviderConfig> {
   const saved = settings.toPublic().ai
   const apiKey = settings.readApiKey()
   if (saved.baseUrl === '' || saved.model === '' || apiKey === null) {
     return fail('NOT_CONFIGURED', NOT_CONFIGURED_MESSAGE)
   }
-  return makeConfig(saved.baseUrl, saved.model, apiKey)
+  return makeConfig(saved.apiFormat, saved.baseUrl, saved.model, apiKey)
 }
 
-function originOf(baseUrl: string): string | null {
-  const normalized = normalizeBaseUrl(baseUrl)
+function originOf(baseUrl: string, apiFormat: AiApiFormat): string | null {
+  const normalized = normalizeBaseUrl(baseUrl, apiFormat)
   if (!normalized.ok) return null
   return new URL(normalized.data).origin
 }
 
 // 没填新 Key 时沿用已保存的 Key，但只发给已保存地址的同一个站点：
 // 换了服务商、填了新地址却忘了填新 Key，不能把旧服务商的 Key 发给新地址。
-function resolveTestConfig(settings: SettingsStore, draft: TestDraft | undefined): Result<ChatConfig> {
+function resolveTestConfig(settings: SettingsStore, draft: TestDraft | undefined): Result<ProviderConfig> {
   if (draft === undefined) return loadChatConfig(settings)
-  if (draft.apiKey !== undefined) return makeConfig(draft.baseUrl, draft.model, draft.apiKey)
+  const saved = settings.toPublic().ai
+  const apiFormat = draft.apiFormat ?? saved.apiFormat
+  if (draft.apiKey !== undefined) return makeConfig(apiFormat, draft.baseUrl, draft.model, draft.apiKey)
   const savedKey = settings.readApiKey()
   if (savedKey === null) return fail('NOT_CONFIGURED', NOT_CONFIGURED_MESSAGE)
-  const draftOrigin = originOf(draft.baseUrl)
+  const draftOrigin = originOf(draft.baseUrl, apiFormat)
   if (draftOrigin === null) return fail('INVALID_INPUT', 'AI 服务地址需要是有效的 http 或 https 地址')
-  if (draftOrigin !== originOf(settings.toPublic().ai.baseUrl)) {
+  if (draftOrigin !== originOf(saved.baseUrl, saved.apiFormat)) {
     return fail('NOT_CONFIGURED', '地址和已保存的不是同一个服务，请先填写这个服务的 API Key 再测试')
   }
-  return makeConfig(draft.baseUrl, draft.model, savedKey)
+  return makeConfig(apiFormat, draft.baseUrl, draft.model, savedKey)
 }
 
 export function isAiConfigured(settings: SettingsStore): boolean {
@@ -104,7 +105,7 @@ function statusFailure(status: number): Result<never> {
   if (status === 401 || status === 403) return fail('AUTH', 'API Key 不对或没有权限')
   if (status === 429) return fail('RATE_LIMIT', '请求太频繁，稍后再试')
   if (status >= 500) return fail('SERVER', 'AI 服务出错，稍后再试')
-  return fail('BAD_RESPONSE', `AI 服务返回了 ${status}，请检查地址和模型名称`)
+  return fail('BAD_RESPONSE', `AI 服务返回了 ${status}，请检查地址、模型名称和接口格式`)
 }
 
 // 兜底：正常情况下 redirect: 'error' 会在 fetch 阶段抛错（见 isRedirectError）。net.fetch 的 type 和 url 不可靠，这里只看 redirected 和 status。
@@ -140,13 +141,16 @@ async function readLimitedText(response: FetchResponse): Promise<Result<string>>
   return ok(Buffer.concat(chunks).toString('utf8'))
 }
 
+/** 发出请求，返回回复的原始 JSON 文本。 */
 async function postChat(
-  config: ChatConfig,
-  body: ChatRequestBody,
+  config: ProviderConfig,
+  messages: ChatMessage[],
   timeoutMs: number,
   tracking: Tracking | null
 ): Promise<Result<string>> {
-  const endpoint = `${config.baseUrl}/chat/completions`
+  const request = buildRequest(config, messages)
+  if (!request.ok) return request
+  const { endpoint, headers, body } = request.data
   const allowed = checkSandboxUrl(endpoint)
   if (!allowed.ok) return allowed
 
@@ -156,11 +160,8 @@ async function postChat(
   try {
     const response = await net.fetch(endpoint, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(body),
+      headers,
+      body,
       redirect: 'error',
       credentials: 'omit',
       signal: attempt.controller.signal
@@ -186,22 +187,6 @@ async function postChat(
   }
 }
 
-function readAssistantContent(body: string): Result<string> {
-  let data: unknown
-  try {
-    data = JSON.parse(body)
-  } catch {
-    return fail('BAD_RESPONSE', BAD_REPLY_MESSAGE)
-  }
-  if (!isRecord(data) || !Array.isArray(data.choices)) return fail('BAD_RESPONSE', BAD_REPLY_MESSAGE)
-  const choices: unknown[] = data.choices
-  const first: unknown = choices[0]
-  if (!isRecord(first) || !isRecord(first.message)) return fail('BAD_RESPONSE', BAD_REPLY_MESSAGE)
-  const content: unknown = first.message.content
-  if (typeof content !== 'string') return fail('BAD_RESPONSE', BAD_REPLY_MESSAGE)
-  return ok(content)
-}
-
 export async function completeChat(
   settings: SettingsStore,
   tracking: Tracking,
@@ -209,10 +194,10 @@ export async function completeChat(
 ): Promise<Result<string>> {
   const config = loadChatConfig(settings)
   if (!config.ok) return config
-  const body: ChatRequestBody = { model: config.data.model, messages, temperature: TEMPERATURE }
-  const reply = await postChat(config.data, body, CHAT_TIMEOUT_MS, tracking)
+  const hasAudio = messages.some((message) => message.audio !== undefined)
+  const reply = await postChat(config.data, messages, hasAudio ? AUDIO_TIMEOUT_MS : CHAT_TIMEOUT_MS, tracking)
   if (!reply.ok) return reply
-  return readAssistantContent(reply.data)
+  return readReplyText(config.data.apiFormat, reply.data)
 }
 
 export async function testAiConnection(
@@ -221,15 +206,10 @@ export async function testAiConnection(
 ): Promise<Result<{ model: string }>> {
   const config = resolveTestConfig(settings, draft)
   if (!config.ok) return config
-  const body: ChatRequestBody = {
-    model: config.data.model,
-    messages: TEST_MESSAGES,
-    temperature: TEMPERATURE
-  }
-  const reply = await postChat(config.data, body, TEST_TIMEOUT_MS, null)
+  const reply = await postChat(config.data, TEST_MESSAGES, TEST_TIMEOUT_MS, null)
   if (!reply.ok) return reply
-  const content = readAssistantContent(reply.data)
-  if (!content.ok) return fail('BAD_RESPONSE', NOT_OPENAI_COMPATIBLE_MESSAGE)
+  const content = readReplyText(config.data.apiFormat, reply.data)
+  if (!content.ok) return fail('BAD_RESPONSE', WRONG_FORMAT_MESSAGE[config.data.apiFormat])
   return ok({ model: config.data.model })
 }
 

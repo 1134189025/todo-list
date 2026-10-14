@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { AiCommandResult, ErrorCode } from '@shared/api'
+import type { AiCommandResult, ErrorCode, VoiceClip } from '@shared/api'
 import type { Task } from '@shared/types'
 import { truncateTitle } from '@shared/text'
 import { callApi } from '../lib/callApi'
@@ -20,34 +20,41 @@ import type { TasksController } from './useTasks'
 /** 已经直接执行的改动和提示文字；id 用来在用户从提示条撤销后把它从卡片上去掉。 */
 export type Applied = { id: string; message: string; changes: TaskChange[] }
 
+/**
+ * 这句指令说了什么。script：打字的原话，或 AI 从录音里听写出的原话（还没听写、没听清时为空）；
+ * clip：语音指令的录音，打字时为 null。
+ */
+export type Said = { script: string; clip: VoiceClip | null }
+
 export type AiStage =
   | { kind: 'idle' }
-  | { kind: 'thinking'; script: string; requestId: string }
+  | ({ kind: 'thinking'; requestId: string } & Said)
   // 新建和删除要确认；applied 是已经直接执行的那部分（没有就为 null），撤销时和这一步一起撤。
-  | {
+  | ({
       kind: 'confirm'
-      script: string
       items: DraftItem[]
       deletes: DeleteDraft[]
       unmatched: string[]
       applied: Applied | null
-    }
-  | { kind: 'unmatched'; script: string; unmatched: string[]; applied: Applied | null }
-  | { kind: 'empty'; script: string }
-  | { kind: 'failed'; script: string; code: ErrorCode; message: string }
+    } & Said)
+  | ({ kind: 'unmatched'; unmatched: string[]; applied: Applied | null } & Said)
+  | ({ kind: 'empty' } & Said)
+  | ({ kind: 'failed'; code: ErrorCode; message: string } & Said)
 
 export type AiFlow = {
   stage: AiStage
   /** 发起一次 AI 指令（原话已经 trim、非空）。 */
   start: (script: string) => void
+  /** 用一段录音发起 AI 指令。 */
+  startVoice: (clip: VoiceClip) => void
   /** 思考中点「取消」：通知主进程，并把原话放回输入框。 */
   cancelThinking: () => void
-  /** 「重新输入」：把原话放回输入框。 */
+  /** 「重新输入」：把原话（语音时是听写出的原话）放回输入框。 */
   reenter: () => void
   /** 「取消」：丢弃待确认的部分（已经直接执行的不受影响，可以用提示条撤销）。 */
   dismiss: () => void
   retry: () => void
-  /** 「先存成 1 条」「直接存为待办」：把原话存成一条手动待办。 */
+  /** 「先存成 1 条」「直接存为待办」：把原话存成一条手动待办（没有原话时不做）。 */
   saveAsOne: () => void
   updateItem: (key: string, patch: DraftPatch) => void
   removeItem: (key: string) => void
@@ -65,6 +72,12 @@ type Options = {
 /** 确认卡片里要执行的条数：勾选且标题非空的新建 + 勾选的删除。 */
 export function confirmCount(stage: Extract<AiStage, { kind: 'confirm' }>): number {
   return pickableItems(stage.items).length + stage.deletes.filter((item) => item.include).length
+}
+
+/** 卡片上引用的原话（带引号）；语音还没听写或没听清时说是一段几秒的语音。 */
+export function quoteOf(said: Said): string {
+  if (said.script !== '' || said.clip === null) return `“${said.script}”`
+  return `（一段 ${said.clip.seconds} 秒的语音）`
 }
 
 function resultMessage(added: number, deleted: number): string {
@@ -119,7 +132,12 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
     if (applied !== null) tasks.offerUndo(applied.message, undoApplied(applied))
   }
 
-  function receive(script: string, result: AiCommandResult): void {
+  // 语音指令没有可以放回去的原话时，输入框里原来打的字保持不动。
+  function restoreScript(said: Said): void {
+    if (said.script !== '') restoreDraft(said.script)
+  }
+
+  function receive(said: Said, result: AiCommandResult): void {
     const applied = applyDirect(result)
     const current = tasks.snapshot() ?? []
     const items = result.actions.flatMap((action) => (action.op === 'add' ? [toDraftItem(action.item)] : []))
@@ -129,36 +147,45 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
       return draft === null ? [] : [draft]
     })
     if (items.length > 0 || deletes.length > 0) {
-      setStage({ kind: 'confirm', script, items, deletes, unmatched: result.unmatched, applied })
+      setStage({ kind: 'confirm', ...said, items, deletes, unmatched: result.unmatched, applied })
     } else if (result.unmatched.length > 0) {
-      setStage({ kind: 'unmatched', script, unmatched: result.unmatched, applied })
+      setStage({ kind: 'unmatched', ...said, unmatched: result.unmatched, applied })
     } else if (applied === null) {
-      setStage({ kind: 'empty', script })
+      setStage({ kind: 'empty', ...said })
     } else {
       setStage({ kind: 'idle' })
     }
   }
 
-  function start(script: string): void {
+  function run(said: Said): void {
     const requestId = crypto.randomUUID()
     requestRef.current = requestId
-    setStage({ kind: 'thinking', script, requestId })
-    void callApi(() => window.api.ai.command({ requestId, text: script })).then((result) => {
+    setStage({ kind: 'thinking', requestId, ...said })
+    const request = said.clip === null ? { requestId, text: said.script } : { requestId, audio: said.clip }
+    void callApi(() => window.api.ai.command(request)).then((result) => {
       if (requestRef.current !== requestId) return
       requestRef.current = null
       if (result.ok) {
-        receive(script, result.data)
+        receive(said.clip === null ? said : { script: result.data.heard ?? '', clip: said.clip }, result.data)
         return
       }
       if (result.error.code === 'CANCELLED') return
-      setStage({ kind: 'failed', script, code: result.error.code, message: result.error.message })
+      setStage({ kind: 'failed', ...said, code: result.error.code, message: result.error.message })
     })
+  }
+
+  function start(script: string): void {
+    run({ script, clip: null })
+  }
+
+  function startVoice(clip: VoiceClip): void {
+    run({ script: '', clip })
   }
 
   function cancelThinking(): void {
     if (stage.kind !== 'thinking') return
     cancelRequest(stage.requestId)
-    restoreDraft(stage.script)
+    restoreScript(stage)
     setStage({ kind: 'idle' })
   }
 
@@ -166,7 +193,7 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
     if (stage.kind === 'idle') return
     if (stage.kind === 'thinking') cancelRequest(stage.requestId)
     if (stage.kind === 'confirm' || stage.kind === 'unmatched') reofferApplied(stage.applied)
-    restoreDraft(stage.script)
+    restoreScript(stage)
     setStage({ kind: 'idle' })
   }
 
@@ -177,11 +204,11 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
   }
 
   function retry(): void {
-    if (stage.kind === 'failed') start(stage.script)
+    if (stage.kind === 'failed') run({ script: stage.script, clip: stage.clip })
   }
 
   function saveAsOne(): void {
-    if (stage.kind !== 'failed' && stage.kind !== 'empty') return
+    if ((stage.kind !== 'failed' && stage.kind !== 'empty') || stage.script === '') return
     const current = tasks.snapshot()
     if (current === null) return
     const created = createTask(
@@ -244,6 +271,7 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
   return {
     stage,
     start,
+    startVoice,
     cancelThinking,
     reenter,
     dismiss,

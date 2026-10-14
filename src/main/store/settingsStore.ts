@@ -9,7 +9,14 @@ import {
 } from './atomicFile'
 import { DEFAULT_VOICE_HOTKEY, canonicalize, validate } from '@shared/accelerator'
 import { fail, ok } from '@shared/result'
-import type { FloatWindowSettings, HotkeyStatus, PublicSettings, Result, SettingsPatch } from '@shared/api'
+import type {
+  AiApiFormat,
+  FloatWindowSettings,
+  HotkeyStatus,
+  PublicSettings,
+  Result,
+  SettingsPatch
+} from '@shared/api'
 import { isDateKey, isTimeKey } from '@shared/dates'
 import { isRecord } from '@shared/validate'
 import { openAtLoginStatus } from '../loginItem'
@@ -23,7 +30,7 @@ export type WindowBounds = { x: number; y: number; width: number; height: number
 export type StoredFloatWindow = FloatWindowSettings & { bounds: WindowBounds | null }
 
 type StoredSettings = {
-  ai: { baseUrl: string; model: string; apiKeyEnc: string | null }
+  ai: { baseUrl: string; model: string; apiFormat: AiApiFormat; apiKeyEnc: string | null }
   autoSummary: { enabled: boolean; time: string }
   openAtLogin: boolean
   voiceHotkey: string | null
@@ -61,7 +68,7 @@ export type SettingsStore = {
 const DEFAULT_FLOAT_WINDOW: StoredFloatWindow = { open: false, alwaysOnTop: true, locked: false, bounds: null }
 
 const DEFAULT_SETTINGS: StoredSettings = {
-  ai: { baseUrl: '', model: '', apiKeyEnc: null },
+  ai: { baseUrl: '', model: '', apiFormat: 'openai', apiKeyEnc: null },
   autoSummary: { enabled: true, time: '21:00' },
   openAtLogin: false,
   voiceHotkey: DEFAULT_VOICE_HOTKEY,
@@ -93,10 +100,12 @@ function parseWindowBounds(value: unknown): WindowBounds | null {
 
 function parseAi(value: unknown): StoredSettings['ai'] {
   if (!isRecord(value)) return DEFAULT_SETTINGS.ai
-  const { baseUrl, model, apiKeyEnc } = value
+  const { baseUrl, model, apiFormat, apiKeyEnc } = value
   return {
     baseUrl: typeof baseUrl === 'string' ? baseUrl : DEFAULT_SETTINGS.ai.baseUrl,
     model: typeof model === 'string' ? model : DEFAULT_SETTINGS.ai.model,
+    // 旧版设置文件没有这个字段，按 OpenAI 兼容处理
+    apiFormat: apiFormat === 'gemini' ? 'gemini' : 'openai',
     apiKeyEnc: typeof apiKeyEnc === 'string' && apiKeyEnc !== '' ? apiKeyEnc : null
   }
 }
@@ -243,6 +252,7 @@ export function createSettingsStore(filePath: string, runtime: SettingsRuntime):
       ai: {
         baseUrl: current.ai.baseUrl,
         model: current.ai.model,
+        apiFormat: current.ai.apiFormat,
         hasApiKey: usableKey,
         keyUnreadable: current.ai.apiKeyEnc !== null && !usableKey
       },
@@ -263,7 +273,15 @@ export function createSettingsStore(filePath: string, runtime: SettingsRuntime):
     save(patch: SettingsPatch): Promise<Result<PublicSettings>> {
       return update((settings) => ({
         ...settings,
-        ai: patch.ai === undefined ? settings.ai : { ...settings.ai, baseUrl: patch.ai.baseUrl, model: patch.ai.model },
+        ai:
+          patch.ai === undefined
+            ? settings.ai
+            : {
+                ...settings.ai,
+                baseUrl: patch.ai.baseUrl,
+                model: patch.ai.model,
+                apiFormat: patch.ai.apiFormat ?? settings.ai.apiFormat
+              },
         autoSummary: patch.autoSummary ?? settings.autoSummary,
         openAtLogin: patch.openAtLogin ?? settings.openAtLogin,
         voiceHotkey: patch.voiceHotkey === undefined ? settings.voiceHotkey : patch.voiceHotkey,

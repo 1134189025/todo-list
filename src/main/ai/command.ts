@@ -1,4 +1,4 @@
-import type { AiAction, AiCommandResult, Result } from '@shared/api'
+import type { AiAction, AiCommandResult, CommandInput, Result } from '@shared/api'
 import {
   isDateKey,
   isInLaterList,
@@ -17,7 +17,7 @@ import type { SettingsStore } from '../store/settingsStore'
 import type { TasksStore } from '../store/tasksStore'
 import { completeChat } from './client'
 import { extractJsonObject, sanitizeItem, truncateText } from './parse'
-import { buildCommandMessages, COMMAND_ACTION_LIMIT } from './prompts'
+import { buildCommandMessages, COMMAND_ACTION_LIMIT, HEARD_MAX } from './prompts'
 import { oneLine, quoted, readNumber, shortDate } from './taskText'
 
 const MAX_OPEN_LISTED = 100
@@ -87,7 +87,7 @@ function toTaskAction(entry: Record<string, unknown>, task: Task): AiAction | nu
 }
 
 // 逐项校验：编号必须在列表里，操作要对得上任务状态（已完成的不能再完成），同一任务同一操作只留第一次。
-function readActions(reply: Record<string, unknown>, candidates: Task[]): Result<AiCommandResult> {
+function readActions(reply: Record<string, unknown>, candidates: Task[]): Result<Omit<AiCommandResult, 'heard'>> {
   const raw: unknown = reply.actions
   if (!Array.isArray(raw)) return fail('BAD_RESPONSE', BAD_REPLY_MESSAGE)
   const entries: unknown[] = raw
@@ -119,20 +119,29 @@ function readActions(reply: Record<string, unknown>, candidates: Task[]): Result
   return ok({ actions, unmatched })
 }
 
+// 语音输入时 AI 听写出的原话；压成一行、截断，空的当没听清。
+function readHeard(reply: Record<string, unknown>): string | null {
+  if (typeof reply.heard !== 'string') return null
+  const heard = truncateText(oneLine(reply.heard), HEARD_MAX)
+  return heard === '' ? null : heard
+}
+
 export async function runCommand(
   tasks: TasksStore,
   settings: SettingsStore,
-  request: { requestId: string; text: string }
+  request: { requestId: string; input: CommandInput }
 ): Promise<Result<AiCommandResult>> {
   const now = new Date()
   const candidates = listCandidates(tasks.snapshot(), toDateKey(now))
   const reply = await completeChat(
     settings,
     { kind: 'command', requestId: request.requestId },
-    buildCommandMessages(candidatesText(candidates, toDateKey(now)), request.text, now)
+    buildCommandMessages(candidatesText(candidates, toDateKey(now)), request.input, now)
   )
   if (!reply.ok) return reply
   const json = extractJsonObject(reply.data)
   if (!json.ok) return json
-  return readActions(json.data, candidates)
+  const actions = readActions(json.data, candidates)
+  if (!actions.ok) return actions
+  return ok({ ...actions.data, heard: request.input.kind === 'audio' ? readHeard(json.data) : null })
 }

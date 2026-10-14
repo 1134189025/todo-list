@@ -2,11 +2,13 @@ import { SparkIcon } from './icons'
 import './ThinkingCard.css'
 
 type ThinkingCardProps = {
-  script: string
+  quote: string
+  /** 语音指令：AI 要先听再理解。 */
+  voice: boolean
   onCancel: () => void
 }
 
-export function ThinkingCard({ script, onCancel }: ThinkingCardProps) {
+export function ThinkingCard({ quote, voice, onCancel }: ThinkingCardProps) {
   return (
     <section className="thinking-card" aria-label="AI 正在整理">
       <div className="thinking-card-head">
@@ -14,10 +16,10 @@ export function ThinkingCard({ script, onCancel }: ThinkingCardProps) {
           <SparkIcon size={18} />
         </span>
         <span className="thinking-card-title" role="status">
-          AI 正在理解你说的话…
+          {voice ? 'AI 正在听你说的话…' : 'AI 正在理解你说的话…'}
         </span>
       </div>
-      <p className="thinking-card-quote">“{script}”</p>
+      <p className="thinking-card-quote">{quote}</p>
       <div className="thinking-card-bars" aria-hidden="true">
         <span className="thinking-card-bar" />
         <span className="thinking-card-bar is-delay-1" />

@@ -22,7 +22,7 @@ export function NoticeCard({ tone, title, body, quote, primary, secondary }: Not
           {body !== undefined && <p className="notice-card-body">{body}</p>}
         </div>
       </div>
-      {quote !== undefined && <p className="notice-card-quote">“{quote}”</p>}
+      {quote !== undefined && <p className="notice-card-quote">{quote}</p>}
       <div className="notice-card-actions">
         <button type="button" className="ai-card-button" onClick={primary.onClick}>
           {primary.label}
