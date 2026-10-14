@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC, type QingxinApi, type SummaryResult } from '@shared/api'
+import { IPC, type PublicSettings, type QingxinApi, type SummaryResult } from '@shared/api'
+import type { Task } from '@shared/types'
+
+function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
+  const listener = (_event: unknown, payload: T): void => cb(payload)
+  ipcRenderer.on(channel, listener)
+  return () => {
+    ipcRenderer.removeListener(channel, listener)
+  }
+}
 
 const api: QingxinApi = {
   tasks: {
@@ -19,23 +28,14 @@ const api: QingxinApi = {
     cancel: (requestId) => ipcRenderer.invoke(IPC.aiCancel, requestId)
   },
   events: {
-    onSummaryShow: (cb) => {
-      const listener = (_event: unknown, summary: SummaryResult): void => cb(summary)
-      ipcRenderer.on(IPC.summaryShow, listener)
-      return () => {
-        ipcRenderer.removeListener(IPC.summaryShow, listener)
-      }
-    },
-    onVoiceHotkey: (cb) => {
-      const listener = (): void => cb()
-      ipcRenderer.on(IPC.voiceHotkey, listener)
-      return () => {
-        ipcRenderer.removeListener(IPC.voiceHotkey, listener)
-      }
-    }
+    onSummaryShow: (cb) => subscribe<SummaryResult>(IPC.summaryShow, cb),
+    onVoiceHotkey: (cb) => subscribe<undefined>(IPC.voiceHotkey, () => cb()),
+    onTasksChanged: (cb) => subscribe<Task[]>(IPC.tasksChanged, cb),
+    onSettingsChanged: (cb) => subscribe<PublicSettings>(IPC.settingsChanged, cb)
   },
   app: {
-    isSandbox: ipcRenderer.sendSync(IPC.appIsSandbox) === true
+    isSandbox: ipcRenderer.sendSync(IPC.appIsSandbox) === true,
+    showMain: () => ipcRenderer.invoke(IPC.appShowMain)
   }
 }
 

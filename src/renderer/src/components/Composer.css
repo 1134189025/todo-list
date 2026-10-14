@@ -74,8 +74,70 @@
   color: var(--color-ink-disabled);
 }
 
+.composer-when {
+  flex: none;
+  max-width: 40%;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-done-bg);
+  color: var(--color-ink-secondary);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.composer-when:hover {
+  background: var(--color-caption-hover);
+}
+
+.composer-when-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-meta {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
+}
+
+.composer-modes {
+  flex: none;
+  display: flex;
+  padding: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--color-tab-track);
+}
+
+.composer-mode {
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-ink-muted);
+  font-size: 12px;
+}
+
+.composer-mode.is-active {
+  background: var(--color-card);
+  color: var(--color-ink);
+  font-weight: 600;
+  box-shadow: var(--shadow-tab);
+}
+
 .composer-hint {
   margin: 0;
+  min-width: 0;
   text-align: center;
   font-size: 12px;
   color: var(--color-ink-muted);

@@ -1,4 +1,4 @@
-import type { SettingsPatch } from './api'
+import type { FloatWindowSettings, SettingsPatch } from './api'
 import { isDateKey, isIsoTimestamp, isTimeKey } from './dates'
 import { TITLE_MAX } from './text'
 import type { Task, TaskSource } from './types'
@@ -133,6 +133,32 @@ export function validateSettingsPatch(value: unknown): Validation<SettingsPatch>
       return invalid('语音快捷键格式不正确')
     }
     patch.voiceHotkey = value.voiceHotkey
+  }
+  if (value.minimizeToTray !== undefined) {
+    if (typeof value.minimizeToTray !== 'boolean') return invalid('最小化到托盘设置格式不正确')
+    patch.minimizeToTray = value.minimizeToTray
+  }
+  if (value.floatWindow !== undefined) {
+    const floatWindow = validateFloatWindowPatch(value.floatWindow)
+    if (!floatWindow.ok) return invalid(floatWindow.message)
+    patch.floatWindow = floatWindow.value
+  }
+  return valid(patch)
+}
+
+const FLOAT_WINDOW_KEYS = ['open', 'alwaysOnTop', 'locked'] as const
+
+function validateFloatWindowPatch(value: unknown): Validation<Partial<FloatWindowSettings>> {
+  if (!isRecord(value)) return invalid('悬浮窗设置格式不正确')
+  const patch: Partial<FloatWindowSettings> = {}
+  for (const key of Object.keys(value)) {
+    if (!FLOAT_WINDOW_KEYS.some((known) => known === key)) return invalid('悬浮窗设置格式不正确')
+  }
+  for (const key of FLOAT_WINDOW_KEYS) {
+    const field = value[key]
+    if (field === undefined) continue
+    if (typeof field !== 'boolean') return invalid('悬浮窗设置格式不正确')
+    patch[key] = field
   }
   return valid(patch)
 }

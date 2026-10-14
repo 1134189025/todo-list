@@ -4,6 +4,7 @@ import {
   createQueuedWriter,
   errorCode,
   quarantineCorruptFile,
+  stripBom,
   type QueuedWriter
 } from './atomicFile'
 import { fail, ok } from '@shared/result'
@@ -30,7 +31,7 @@ type FileOutcome = { kind: 'corrupt' } | { kind: 'readable'; tasks: Task[]; skip
 function parseTasksFile(raw: string): FileOutcome {
   let data: unknown
   try {
-    data = JSON.parse(raw)
+    data = JSON.parse(stripBom(raw))
   } catch {
     return { kind: 'corrupt' }
   }
@@ -141,7 +142,8 @@ export function createTasksStore(filePath: string): TasksStore {
       if (backupPending && !(await backupOriginal())) {
         return fail('IO', '数据文件还没有备份，为保护原文件暂不保存')
       }
-      const result = await writer.write(serialize(next))
+      // 等备份时可能又来了新的保存：总是写内存里最新的一份，不按到达顺序写旧的。
+      const result = await writer.write(serialize(tasks))
       return result.ok ? ok(null) : fail('IO', result.message)
     },
     snapshot(): Task[] {

@@ -56,3 +56,12 @@
 .title-bar-button:focus-visible {
   outline-offset: -2px;
 }
+
+.title-bar-button.is-on {
+  color: var(--color-leaf-line);
+  background: var(--color-mint-soft);
+}
+
+.title-bar-button.is-on:hover {
+  background: var(--color-sprout-leaf);
+}

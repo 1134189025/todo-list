@@ -31,6 +31,10 @@
   color: var(--color-ink-muted);
 }
 
+.ai-form-hint.is-error {
+  color: var(--color-danger);
+}
+
 .ai-form-actions {
   display: flex;
   flex-wrap: wrap;

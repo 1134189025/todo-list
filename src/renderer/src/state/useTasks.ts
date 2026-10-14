@@ -50,6 +50,17 @@ export function useTasks(showToast: ShowToast): TasksController {
     }
   }, [])
 
+  // 另一个窗口（主窗口 / 悬浮窗）保存了任务：换成主进程里的最新列表。读取完成前收到的忽略，读取结果本身就是最新的。
+  useEffect(
+    () =>
+      window.api.events.onTasksChanged((next) => {
+        if (latest.current === null) return
+        latest.current = next
+        setTasks(next)
+      }),
+    []
+  )
+
   const replace = useCallback((next: Task[]): void => {
     const previous = latest.current
     if (previous === null) return

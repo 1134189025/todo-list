@@ -48,7 +48,7 @@ export function EmptyState({ kind }: EmptyStateProps) {
   }
   return (
     <p className="empty-state-text">
-      {kind === 'emptyToday' ? '今天还没有待办，点下面的麦克风说一句试试' : '之后还没有安排'}
+      {kind === 'emptyToday' ? '今天还没有待办，在下面输入一句就能添加' : '之后还没有安排'}
     </p>
   )
 }

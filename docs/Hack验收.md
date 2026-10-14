@@ -27,7 +27,7 @@
    | 全打 | 本项目：任务 / 设置的持久化（原子写、损坏备份、撤销、退出前刷盘）、API Key 的保存与使用、对外的 AI 网络请求、挡板（`src/main/sandbox.ts`）本身 | 最强的模型，再加第 5 节对抗清单里相关的几类 | 约 15 分钟 |
 
    小模型（如 Haiku）只做机械的重跑，不找反例。
-   **本项目例外：用户指定 Hacker 一律用 Haiku 5.5，思考等级 high。**
+   **本项目例外：用户指定 Hacker 一律用 Opus 5.5，思考等级 high（第二版起从 Haiku 5.5 换成 Opus 5.5）。**
 3. **派 Hacker**：另起一个后台子 agent，spec 照第 6 节写，不在 spec 里替它下结论。**思考等级显式指定 high**：
    不指定的话子 agent 会继承主会话的等级，成本和行为都不可控。
    （Claude Code 里：`Agent` 工具，`run_in_background: true`，传 `model` 和 `effort: "high"`。）
@@ -123,6 +123,10 @@ playwright-core 的 `_electron.launch` 在 Electron 44 上会报 "Process failed
 
 本项目：
 - 启动方式：上面第 1–3 步
+- 在 Linux 云容器里跑（没有 Windows 时）：`node node_modules/electron/install.js` 下载 Electron 二进制；safeStorage 需要解锁的
+  keyring（容器里 `apt-get install gnome-keyring`），否则保存 Key 会被拒绝。启动（挡板安静模式）：
+  `QINGXIN_SANDBOX=1 QINGXIN_DATA_DIR=<临时目录>/data QINGXIN_SANDBOX_QUIET=1 dbus-run-session -- sh -c "printf x | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1; exec xvfb-run -a -s '-screen 0 1600x1000x24' node_modules/electron/dist/electron . --no-sandbox --password-store=gnome-libsecret --remote-debugging-port=<端口>"`，
+  再 `chromium.connectOverCDP`。用 detached 启动、按进程组结束（只杀 xvfb-run 会留下 electron）。Linux 上验不了托盘和 Windows 窗口行为。
 - 造数据：直接写 `tasks.json` / `settings.json`（设置里的 Key 只能通过界面填假值，因为是加密存的）
 - 配方：暂无
 - 挡板下验不了、只能用户在真实环境确认的：真实 AI 服务的整理准确率和总结质量、开机自动打开、系统通知及点击跳转、

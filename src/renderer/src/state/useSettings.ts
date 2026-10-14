@@ -29,6 +29,16 @@ export function useSettings(): SettingsController {
     }
   }, [])
 
+  // 托盘、悬浮窗或另一个窗口改了设置。
+  useEffect(
+    () =>
+      window.api.events.onSettingsChanged((next) => {
+        setSettings(next)
+        setLoadError(null)
+      }),
+    []
+  )
+
   const run = useCallback(async (operation: () => Promise<Result<PublicSettings>>) => {
     const result = await callApi(operation)
     if (result.ok) setSettings(result.data)

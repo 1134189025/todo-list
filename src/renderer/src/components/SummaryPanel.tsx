@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { SummaryResult } from '@shared/api'
+import { dateKeyFromIso } from '@shared/dates'
 import type { Task } from '@shared/types'
 import { formatClock } from '../lib/labels'
 import { orderRows, summaryPlainText } from '../lib/summaryView'
@@ -68,7 +69,9 @@ function renderContent(props: SummaryPanelProps, speech: SpeechController): Reac
       )}
       {summary !== null && !fresh && (
         <div className="summary-panel-stale">
-          <span className="summary-panel-stale-text">待办有变化</span>
+          <span className="summary-panel-stale-text">
+            {dateKeyFromIso(summary.generatedAt) === today ? '待办有变化' : '这是之前生成的总结'}
+          </span>
           <button type="button" className="summary-panel-button" onClick={onRegenerate}>
             重新生成
           </button>

@@ -5,6 +5,7 @@ import { AutoSummaryRow } from './AutoSummaryRow'
 import { HotkeySetting } from './HotkeySetting'
 import { Notice } from './Notice'
 import { OpenAtLoginRow } from './OpenAtLoginRow'
+import { WindowSettings } from './WindowSettings'
 import './SettingsDialog.css'
 
 type SettingsDialogProps = {
@@ -29,6 +30,12 @@ export function SettingsDialog({ settings, loadError, actions }: SettingsDialogP
           AI 服务
         </h3>
         <AiServiceForm ai={settings.ai} encryptionAvailable={settings.encryptionAvailable} actions={actions} />
+      </section>
+      <section className="settings-section" aria-labelledby="settings-window-title">
+        <h3 id="settings-window-title" className="settings-title">
+          窗口
+        </h3>
+        <WindowSettings settings={settings} save={actions.save} />
       </section>
       <div className="settings-card">
         <AutoSummaryRow autoSummary={settings.autoSummary} save={actions.save} />

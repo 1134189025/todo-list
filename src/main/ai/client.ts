@@ -3,6 +3,7 @@ import type { Result } from '@shared/api'
 import { fail, ok } from '@shared/result'
 import { isHttpUrl, isRecord } from '@shared/validate'
 import { checkSandboxUrl } from '../sandbox'
+import { TEST_MESSAGES } from './prompts'
 import type { SettingsStore } from '../store/settingsStore'
 
 export type ChatMessage = { role: 'system' | 'user'; content: string }
@@ -21,7 +22,6 @@ const CHAT_TIMEOUT_MS = 30_000
 const TEST_TIMEOUT_MS = 15_000
 const MAX_RESPONSE_BYTES = 1024 * 1024
 const TEMPERATURE = 0.2
-const TEST_MESSAGE = '你好'
 const NOT_CONFIGURED_MESSAGE = '还没配置 AI 服务'
 const BAD_REPLY_MESSAGE = 'AI 返回的内容看不懂'
 const REDIRECT_MESSAGE = 'AI 服务地址发生了跳转，请填写最终地址'
@@ -51,11 +51,25 @@ function loadChatConfig(settings: SettingsStore): Result<ChatConfig> {
   return makeConfig(saved.baseUrl, saved.model, apiKey)
 }
 
+function originOf(baseUrl: string): string | null {
+  const normalized = normalizeBaseUrl(baseUrl)
+  if (!normalized.ok) return null
+  return new URL(normalized.data).origin
+}
+
+// 没填新 Key 时沿用已保存的 Key，但只发给已保存地址的同一个站点：
+// 换了服务商、填了新地址却忘了填新 Key，不能把旧服务商的 Key 发给新地址。
 function resolveTestConfig(settings: SettingsStore, draft: TestDraft | undefined): Result<ChatConfig> {
   if (draft === undefined) return loadChatConfig(settings)
-  const apiKey = draft.apiKey ?? settings.readApiKey()
-  if (apiKey === null) return fail('NOT_CONFIGURED', NOT_CONFIGURED_MESSAGE)
-  return makeConfig(draft.baseUrl, draft.model, apiKey)
+  if (draft.apiKey !== undefined) return makeConfig(draft.baseUrl, draft.model, draft.apiKey)
+  const savedKey = settings.readApiKey()
+  if (savedKey === null) return fail('NOT_CONFIGURED', NOT_CONFIGURED_MESSAGE)
+  const draftOrigin = originOf(draft.baseUrl)
+  if (draftOrigin === null) return fail('INVALID_INPUT', 'AI 服务地址需要是有效的 http 或 https 地址')
+  if (draftOrigin !== originOf(settings.toPublic().ai.baseUrl)) {
+    return fail('NOT_CONFIGURED', '地址和已保存的不是同一个服务，请先填写这个服务的 API Key 再测试')
+  }
+  return makeConfig(draft.baseUrl, draft.model, savedKey)
 }
 
 export function isAiConfigured(settings: SettingsStore): boolean {
@@ -209,7 +223,7 @@ export async function testAiConnection(
   if (!config.ok) return config
   const body: ChatRequestBody = {
     model: config.data.model,
-    messages: [{ role: 'user', content: TEST_MESSAGE }],
+    messages: TEST_MESSAGES,
     temperature: TEMPERATURE
   }
   const reply = await postChat(config.data, body, TEST_TIMEOUT_MS, null)
