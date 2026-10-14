@@ -3,6 +3,7 @@
   "productName": "清新待办",
   "version": "0.2.0",
   "description": "清新待办：Windows 桌面待办应用",
+  "author": "清新待办",
   "private": true,
   "main": "./out/main/index.js",
   "scripts": {
