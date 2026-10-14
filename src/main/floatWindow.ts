@@ -41,6 +41,7 @@ function applyFlags(win: BrowserWindow, state: StoredFloatWindow): void {
   // 固定：不能拖动也不能改大小；渲染进程同时去掉拖动区域。
   win.setMovable(!state.locked)
   win.setResizable(!state.locked)
+  win.setOpacity(state.opacity)
 }
 
 export function createFloatWindowManager(options: FloatOptions): FloatWindowManager {

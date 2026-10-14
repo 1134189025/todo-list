@@ -18,7 +18,7 @@ import type {
   SettingsPatch
 } from '@shared/api'
 import { isDateKey, isTimeKey } from '@shared/dates'
-import { isRecord } from '@shared/validate'
+import { isFloatOpacity, isRecord } from '@shared/validate'
 import { openAtLoginStatus } from '../loginItem'
 
 const FILE_VERSION = 1
@@ -65,7 +65,7 @@ export type SettingsStore = {
   flush(): Promise<void>
 }
 
-const DEFAULT_FLOAT_WINDOW: StoredFloatWindow = { open: false, alwaysOnTop: true, locked: false, bounds: null }
+const DEFAULT_FLOAT_WINDOW: StoredFloatWindow = { open: false, alwaysOnTop: true, locked: false, opacity: 1, bounds: null }
 
 const DEFAULT_SETTINGS: StoredSettings = {
   ai: { baseUrl: '', model: '', apiFormat: 'openai', apiKeyEnc: null },
@@ -129,6 +129,7 @@ function parseFloatWindow(value: unknown): StoredFloatWindow {
     open: booleanOr(value.open, DEFAULT_FLOAT_WINDOW.open),
     alwaysOnTop: booleanOr(value.alwaysOnTop, DEFAULT_FLOAT_WINDOW.alwaysOnTop),
     locked: booleanOr(value.locked, DEFAULT_FLOAT_WINDOW.locked),
+    opacity: isFloatOpacity(value.opacity) ? value.opacity : DEFAULT_FLOAT_WINDOW.opacity,
     bounds: parseWindowBounds(value.bounds)
   }
 }
@@ -247,7 +248,7 @@ export function createSettingsStore(filePath: string, runtime: SettingsRuntime):
 
   function toPublic(): PublicSettings {
     const usableKey = readApiKey() !== null
-    const { open, alwaysOnTop, locked } = current.floatWindow
+    const { open, alwaysOnTop, locked, opacity } = current.floatWindow
     return {
       ai: {
         baseUrl: current.ai.baseUrl,
@@ -262,7 +263,7 @@ export function createSettingsStore(filePath: string, runtime: SettingsRuntime):
       voiceHotkey: { accelerator: current.voiceHotkey, status: runtime.hotkeyStatus() },
       minimizeToTray: current.minimizeToTray,
       trayAvailable: runtime.trayAvailable(),
-      floatWindow: { open, alwaysOnTop, locked }
+      floatWindow: { open, alwaysOnTop, locked, opacity }
     }
   }
 

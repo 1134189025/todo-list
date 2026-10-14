@@ -10,7 +10,7 @@ import {
   type Size
 } from './windowShared'
 
-const DEFAULT_SIZE = { width: 1100, height: 760 }
+const DEFAULT_SIZE = { width: 1240, height: 780 }
 const MIN_SIZE = { width: 480, height: 560 }
 const MAX_WORK_AREA_RATIO = 0.9
 const BACKGROUND = '#EDF3EE'

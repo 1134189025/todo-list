@@ -1,0 +1,122 @@
+.assistant {
+  flex: none;
+  width: 400px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-card);
+  box-shadow: inset 1px 0 0 var(--color-border-subtle);
+}
+
+.assistant-head {
+  flex: none;
+  min-width: 0;
+  padding: 16px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: inset 0 -1px 0 var(--color-divider);
+}
+
+.assistant-icon {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-ai-bg);
+  color: var(--color-ai-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.assistant-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.assistant-tabs {
+  flex: none;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--color-tab-track);
+  display: flex;
+  gap: 2px;
+}
+
+.assistant-tab {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--color-ink-muted);
+}
+
+.assistant-tab.is-active {
+  background: var(--color-card);
+  box-shadow: var(--shadow-tab);
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.assistant-log,
+.assistant-summary {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.assistant-log {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-exchange {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.assistant-bubble {
+  max-width: 88%;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.assistant-bubble.is-ai {
+  align-self: flex-start;
+  border-top-left-radius: 4px;
+  background: var(--color-ai-row-bg);
+  box-shadow: 0 0 0 1px var(--color-ai-row-border);
+  color: var(--color-ink);
+}
+
+.assistant-bubble.is-user {
+  align-self: flex-end;
+  border-top-right-radius: 4px;
+  background: var(--color-mint-soft);
+  color: var(--color-mint-ink);
+}
+
+.assistant-bottom {
+  flex: none;
+  min-width: 0;
+  padding: 8px 16px 16px;
+}
+
+/* 确认卡片条目多时不把对话挤没：底部最多占七成，超出在这里滚动。 */
+.assistant-bottom {
+  max-height: 72%;
+  overflow-y: auto;
+}

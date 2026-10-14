@@ -17,14 +17,14 @@ import type { SettingsStore } from '../store/settingsStore'
 import type { TasksStore } from '../store/tasksStore'
 import { completeChat } from './client'
 import { extractJsonObject, sanitizeItem, truncateText } from './parse'
-import { buildCommandMessages, COMMAND_ACTION_LIMIT, HEARD_MAX } from './prompts'
+import { buildCommandMessages, COMMAND_ACTION_LIMIT, HEARD_MAX, REPLY_MAX } from './prompts'
 import { oneLine, quoted, readNumber, shortDate } from './taskText'
 
 const MAX_OPEN_LISTED = 100
 const MAX_DONE_LISTED = 20
 const MAX_UNMATCHED = 5
 const UNMATCHED_MAX = 30
-const BAD_REPLY_MESSAGE = 'AI 返回的内容看不懂'
+const BAD_REPLY_MESSAGE = 'AI 的回复里没有操作列表，再试一次'
 
 // 发给 AI 的现有待办：先今天未完成、再之后未完成、最后今天已完成（给「取消完成」用），按编号 1、2、3 列出。
 function listCandidates(snapshot: Task[], today: string): Task[] {
@@ -87,7 +87,10 @@ function toTaskAction(entry: Record<string, unknown>, task: Task): AiAction | nu
 }
 
 // 逐项校验：编号必须在列表里，操作要对得上任务状态（已完成的不能再完成），同一任务同一操作只留第一次。
-function readActions(reply: Record<string, unknown>, candidates: Task[]): Result<Omit<AiCommandResult, 'heard'>> {
+function readActions(
+  reply: Record<string, unknown>,
+  candidates: Task[]
+): Result<Omit<AiCommandResult, 'heard' | 'reply'>> {
   const raw: unknown = reply.actions
   if (!Array.isArray(raw)) return fail('BAD_RESPONSE', BAD_REPLY_MESSAGE)
   const entries: unknown[] = raw
@@ -138,12 +141,12 @@ function stripHidden(text: string): string {
   )
 }
 
-// 语音输入时 AI 听写出的原话；去掉看不见的字符，其它控制字符当空格，压成一行、截断。
-// 没有一个看得见的字（字母、数字、标点、符号）就当没听清。
-function readHeard(reply: Record<string, unknown>): string | null {
-  if (typeof reply.heard !== 'string') return null
-  const heard = truncateText(oneLine(stripHidden(reply.heard).replace(/\p{Cc}/gu, ' ')), HEARD_MAX)
-  return VISIBLE_CHAR.test(heard.replace(BRAILLE_BLANK, '')) ? heard : null
+// AI 写给人看的一段文字（听写的原话、助理回复）：去掉看不见的字符，其它控制字符当空格，压成一行、截断。
+// 没有一个看得见的字（字母、数字、标点、符号）就当没有。
+function readVisibleText(value: unknown, max: number): string | null {
+  if (typeof value !== 'string') return null
+  const text = truncateText(oneLine(stripHidden(value).replace(/\p{Cc}/gu, ' ')), max)
+  return VISIBLE_CHAR.test(text.replace(BRAILLE_BLANK, '')) ? text : null
 }
 
 export async function runCommand(
@@ -159,9 +162,13 @@ export async function runCommand(
     buildCommandMessages(candidatesText(candidates, toDateKey(now)), request.input, now)
   )
   if (!reply.ok) return reply
-  const json = extractJsonObject(reply.data)
+  const json = extractJsonObject(reply.data, (data) => Array.isArray(data.actions))
   if (!json.ok) return json
   const actions = readActions(json.data, candidates)
   if (!actions.ok) return actions
-  return ok({ ...actions.data, heard: request.input.kind === 'audio' ? readHeard(json.data) : null })
+  return ok({
+    ...actions.data,
+    heard: request.input.kind === 'audio' ? readVisibleText(json.data.heard, HEARD_MAX) : null,
+    reply: readVisibleText(json.data.reply, REPLY_MAX)
+  })
 }

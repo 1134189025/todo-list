@@ -1,4 +1,4 @@
-import type { AiApiFormat, CommandInput, FloatWindowSettings, SettingsPatch, VoiceClip } from './api'
+import { FLOAT_OPACITY_MIN, type AiApiFormat, type CommandInput, type FloatWindowSettings, type SettingsPatch, type VoiceClip } from './api'
 import { TASK_FIELDS, type TaskFields, type TaskPatch } from './taskPatch'
 import { isDateKey, isIsoTimestamp, isTimeKey } from './dates'
 import { TITLE_MAX } from './text'
@@ -193,11 +193,19 @@ export function validateSettingsPatch(value: unknown): Validation<SettingsPatch>
 
 const FLOAT_WINDOW_KEYS = ['open', 'alwaysOnTop', 'locked'] as const
 
+export function isFloatOpacity(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= FLOAT_OPACITY_MIN && value <= 1
+}
+
 function validateFloatWindowPatch(value: unknown): Validation<Partial<FloatWindowSettings>> {
   if (!isRecord(value)) return invalid('悬浮窗设置格式不正确')
   const patch: Partial<FloatWindowSettings> = {}
   for (const key of Object.keys(value)) {
-    if (!FLOAT_WINDOW_KEYS.some((known) => known === key)) return invalid('悬浮窗设置格式不正确')
+    if (key !== 'opacity' && !FLOAT_WINDOW_KEYS.some((known) => known === key)) return invalid('悬浮窗设置格式不正确')
+  }
+  if (value.opacity !== undefined) {
+    if (!isFloatOpacity(value.opacity)) return invalid('悬浮窗不透明度不正确')
+    patch.opacity = value.opacity
   }
   for (const key of FLOAT_WINDOW_KEYS) {
     const field = value[key]

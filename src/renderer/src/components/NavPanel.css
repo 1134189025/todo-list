@@ -1,0 +1,116 @@
+.nav-panel {
+  flex: none;
+  width: 200px;
+  min-height: 0;
+  padding: 24px 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: inset -1px 0 0 var(--color-border-subtle);
+  overflow-y: auto;
+}
+
+.nav-panel-caption {
+  margin: 0;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.nav-panel-list {
+  margin: -10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.nav-panel-item {
+  width: 100%;
+  height: 38px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--color-ink-secondary);
+}
+
+.nav-panel-item:hover {
+  background: var(--color-quiet);
+}
+
+.nav-panel-item.is-active {
+  background: var(--color-mint-soft);
+  color: var(--color-mint-ink);
+  font-weight: 600;
+}
+
+.nav-panel-count {
+  min-width: 22px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--color-card);
+  font-size: 12px;
+  text-align: center;
+  color: var(--color-ink-muted);
+}
+
+.nav-panel-progress {
+  padding: 12px;
+  border-radius: var(--radius-row);
+  background: var(--color-card);
+  box-shadow: 0 0 0 1px var(--color-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.nav-panel-progress-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+
+.nav-panel-progress-count {
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.nav-panel-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-track);
+  overflow: hidden;
+}
+
+.nav-panel-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--color-mint-deep);
+  transition: width 240ms ease-out;
+}
+
+.nav-panel-spacer {
+  flex: 1;
+}
+
+.nav-panel-float {
+  height: 36px;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: var(--color-quiet);
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+.nav-panel-float.is-on {
+  background: var(--color-mint-soft);
+  color: var(--color-mint-ink);
+}

@@ -4,7 +4,7 @@ import type { SettingsActions } from './useSettings'
 
 type FloatKey = keyof FloatWindowSettings
 
-const DEFAULT_FLOAT: FloatWindowSettings = { open: false, alwaysOnTop: true, locked: false }
+const DEFAULT_FLOAT: FloatWindowSettings = { open: false, alwaysOnTop: true, locked: false, opacity: 1 }
 
 export type FloatToggle = {
   /** 界面上显示的状态：已保存的值，加上还没保存完的点击。 */

@@ -1,5 +1,36 @@
 export const DEFAULT_VOICE_HOTKEY = 'Control+Shift+Space'
 
+/** 鼠标侧键也能当语音键：Mouse4 = 后退键，Mouse5 = 前进键。单独使用，不带修饰键。 */
+const MOUSE_BUTTONS = new Map<string, { label: string; domButton: number; hookButton: number }>([
+  ['Mouse4', { label: '鼠标后退键', domButton: 3, hookButton: 4 }],
+  ['Mouse5', { label: '鼠标前进键', domButton: 4, hookButton: 5 }]
+])
+
+export function isMouseAccelerator(accelerator: string): boolean {
+  return MOUSE_BUTTONS.has(accelerator)
+}
+
+/** 网页里 MouseEvent.button（3 = 后退，4 = 前进）对应的语音键；其它按钮返回 null。 */
+export function fromMouseButton(button: number): string | null {
+  for (const [accelerator, info] of MOUSE_BUTTONS) {
+    if (info.domButton === button) return accelerator
+  }
+  return null
+}
+
+/** 全局鼠标监听（uiohook）里的按钮编号：4 = 后退，5 = 前进。 */
+export function hookButtonOf(accelerator: string): number | null {
+  return MOUSE_BUTTONS.get(accelerator)?.hookButton ?? null
+}
+
+function mouseCanonical(text: string): string | null {
+  const trimmed = text.trim().toLowerCase()
+  for (const accelerator of MOUSE_BUTTONS.keys()) {
+    if (accelerator.toLowerCase() === trimmed) return accelerator
+  }
+  return null
+}
+
 export type AcceleratorCheck = { ok: true } | { ok: false; reason: string }
 
 const MODIFIER_ORDER = ['Control', 'Alt', 'Shift', 'Super'] as const
@@ -79,6 +110,7 @@ function parse(text: string): ParseResult {
 }
 
 export function validate(text: string): AcceleratorCheck {
+  if (mouseCanonical(text) !== null) return { ok: true }
   const parsed = parse(text.trim())
   if (!parsed.ok) return parsed
   const { modifiers, key } = parsed
@@ -99,6 +131,8 @@ export function validate(text: string): AcceleratorCheck {
 }
 
 export function canonicalize(text: string): string | null {
+  const mouse = mouseCanonical(text)
+  if (mouse !== null) return mouse
   const parsed = parse(text.trim())
   if (!parsed.ok) return null
   return toCanonical(parsed.modifiers, parsed.key)
@@ -124,6 +158,8 @@ function mainKeyFromCode(code: string): string {
 }
 
 export function toLabel(accelerator: string): string {
+  const mouse = MOUSE_BUTTONS.get(accelerator)
+  if (mouse !== undefined) return mouse.label
   return accelerator
     .split('+')
     .map((part) => {

@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Task } from '@shared/types'
+import { todayProgress } from '@shared/dates'
 import { TITLE_MAX, truncateTitle } from '@shared/text'
 import { AiCard } from './components/AiCard'
 import { AppShell } from './components/AppShell'
+import { AssistantPanel, type AssistantTab } from './components/AssistantPanel'
 import { Composer, type ComposerMode, type ComposerWhen, type SubmitMode } from './components/Composer'
 import { Dialog } from './components/Dialog'
+import { NavPanel } from './components/NavPanel'
 import { Notice } from './components/Notice'
 import { SettingsDialog } from './components/SettingsDialog'
 import { SummaryPanel } from './components/SummaryPanel'
@@ -13,8 +16,9 @@ import { TitleBar } from './components/TitleBar'
 import { Toast } from './components/Toast'
 import { VoiceCard } from './components/VoiceCard'
 import { isAiConfigured } from './lib/aiForm'
+import { localSummaryLine } from './lib/localSummary'
 import { createTask, restoreAt, toggleDone, withoutIds } from './lib/taskOps'
-import { type TabKey } from './lib/taskView'
+import { buildTaskView, type TabKey } from './lib/taskView'
 import { useAiFlow } from './state/useAiFlow'
 import { useFloatToggle } from './state/useFloatToggle'
 import { useSettings } from './state/useSettings'
@@ -25,6 +29,14 @@ import { useToday } from './state/useToday'
 import { useVoice, type VoiceAvailability } from './state/useVoice'
 
 const NO_WHEN: ComposerWhen = { date: null, time: null }
+
+function timeGreeting(hour: number): string {
+  if (hour < 5) return '夜深了'
+  if (hour < 11) return '早上好'
+  if (hour < 13) return '中午好'
+  if (hour < 18) return '下午好'
+  return '晚上好'
+}
 
 // 计划 3.3：整个文件损坏是「数据文件损坏」；只跳过部分条目是「有 N 条…已跳过」。
 function dataNotice(backup: string | null, skipped: number): string {
@@ -43,7 +55,8 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null)
   const [tab, setTab] = useState<TabKey>('today')
   const [doneOpen, setDoneOpen] = useState(false)
-  const [summaryOpen, setSummaryOpen] = useState(false)
+  const [assistantTab, setAssistantTab] = useState<AssistantTab>('chat')
+  const summaryOpen = assistantTab === 'summary'
   // null = 还没手动选过：配置了 AI 默认「AI 整理」，没配置默认「手动添加」。
   const [chosenMode, setChosenMode] = useState<ComposerMode | null>(null)
   const [when, setWhen] = useState<ComposerWhen>(NO_WHEN)
@@ -81,17 +94,22 @@ export function App() {
 
   useEffect(() => window.api.events.onSummaryShow((shown) => {
     summary.receive(shown)
-    setSummaryOpen(true)
+    setAssistantTab('summary')
   }), [summary.receive])
 
   function openSummary(): void {
-    setSummaryOpen(true)
+    setAssistantTab('summary')
     if (configured && !summary.fresh) summary.generate()
   }
 
   function closeSummary(): void {
     summary.cancel()
-    setSummaryOpen(false)
+    setAssistantTab('chat')
+  }
+
+  function changeAssistantTab(next: AssistantTab): void {
+    if (next === 'summary') openSummary()
+    else closeSummary()
   }
 
   function submitDraft(text: string, mode: SubmitMode): void {
@@ -173,13 +191,18 @@ export function App() {
       </>
     )
 
-  const composer = (
+  const bottom = (
     <>
       {toast.toast !== null && <Toast message={toast.toast.message} onUndo={toast.undo} />}
       {voice.state.kind !== 'idle' ? (
         <VoiceCard voice={voice} accelerator={accelerator} onOpenSettings={() => setSettingsOpen(true)} />
       ) : aiFlow.stage.kind !== 'idle' ? (
-        <AiCard flow={aiFlow} today={today} onOpenSettings={() => setSettingsOpen(true)} onVoiceAgain={voice.toggle} />
+        <AiCard
+          flow={aiFlow}
+          today={today}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onVoiceAgain={voice.toggle}
+        />
       ) : (
         <Composer
           value={draft}
@@ -202,7 +225,11 @@ export function App() {
     </>
   )
 
-  const drawer = summaryOpen ? (
+  const view = buildTaskView(list ?? [], today)
+  const progress = todayProgress(list ?? [], today)
+  const greeting = `${timeGreeting(new Date().getHours())}！${summaryHeadline ?? localSummaryLine(view)}`
+
+  const summaryPanel = (
     <SummaryPanel
       configured={configured}
       summary={summary.summary}
@@ -215,7 +242,7 @@ export function App() {
       onClose={closeSummary}
       onOpenSettings={() => setSettingsOpen(true)}
     />
-  ) : null
+  )
 
   return (
     <>
@@ -224,7 +251,30 @@ export function App() {
         onToggleFloat={() => floatToggle.toggle('open')}
         onOpenSettings={() => setSettingsOpen(true)}
       />
-      <AppShell main={main} composer={composer} drawer={drawer} drawerLabel="AI 今日总结" />
+      <AppShell
+        nav={
+          <NavPanel
+            tab={tab}
+            counts={{ today: view.today.pending.length, later: view.later.pending.length }}
+            done={progress.done}
+            total={progress.total}
+            floatOpen={floatToggle.state.open}
+            onTabChange={setTab}
+            onToggleFloat={() => floatToggle.toggle('open')}
+          />
+        }
+        main={main}
+        assistant={
+          <AssistantPanel
+            tab={assistantTab}
+            onTabChange={changeAssistantTab}
+            greeting={greeting}
+            log={aiFlow.log}
+            summary={summaryPanel}
+            bottom={bottom}
+          />
+        }
+      />
       <Dialog open={settingsOpen} title="设置" onRequestClose={() => setSettingsOpen(false)}>
         {settingsOpen ? (
           <SettingsDialog settings={settings.settings} loadError={settings.loadError} actions={settings} />

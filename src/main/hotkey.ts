@@ -1,6 +1,8 @@
 import { globalShortcut, type BrowserWindow } from 'electron'
 import { IPC, type HotkeyStatus, type Result } from '@shared/api'
+import { isMouseAccelerator } from '@shared/accelerator'
 import { fail, ok } from '@shared/result'
+import { createMouseHook } from './mouseHook'
 import { isSandbox } from './sandbox'
 
 /** 某一时刻真正注册着的组合和状态，用来在保存设置失败时原样恢复。 */
@@ -18,6 +20,7 @@ export type HotkeyManager = {
 export function createHotkeyManager(getWindow: () => BrowserWindow | null): HotkeyManager {
   let registered: string | null = null
   let state: HotkeyStatus = 'off'
+  const mouseHook = createMouseHook()
 
   function onPress(): void {
     const win = getWindow()
@@ -29,6 +32,7 @@ export function createHotkeyManager(getWindow: () => BrowserWindow | null): Hotk
   }
 
   function tryRegister(accelerator: string): boolean {
+    if (isMouseAccelerator(accelerator)) return mouseHook.start(accelerator, onPress)
     try {
       return globalShortcut.register(accelerator, onPress)
     } catch {
@@ -37,7 +41,10 @@ export function createHotkeyManager(getWindow: () => BrowserWindow | null): Hotk
   }
 
   function unregisterCurrent(): void {
-    if (registered !== null) globalShortcut.unregister(registered)
+    if (registered !== null) {
+      if (isMouseAccelerator(registered)) mouseHook.stop(registered)
+      else globalShortcut.unregister(registered)
+    }
     registered = null
   }
 
@@ -70,7 +77,10 @@ export function createHotkeyManager(getWindow: () => BrowserWindow | null): Hotk
         return ok(null)
       }
       if (!tryRegister(accelerator)) {
-        return fail('HOTKEY_TAKEN', '这个组合被其它程序占用了，换一个吧')
+        return fail(
+          'HOTKEY_TAKEN',
+          isMouseAccelerator(accelerator) ? '鼠标侧键监听没能启动，换个组合键试试' : '这个组合被其它程序占用了，换一个吧'
+        )
       }
       unregisterCurrent()
       registered = accelerator
@@ -94,6 +104,7 @@ export function createHotkeyManager(getWindow: () => BrowserWindow | null): Hotk
     unregisterAll(): void {
       if (isSandbox) return
       globalShortcut.unregisterAll()
+      mouseHook.stopAll()
       registered = null
     }
   }

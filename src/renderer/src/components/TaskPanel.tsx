@@ -73,7 +73,9 @@ export function TaskPanel({
         open={summaryOpen}
         onClick={onToggleSummary}
       />
-      <Tabs active={tab} counts={counts} onChange={onTabChange} />
+      <div className="task-inline-tabs">
+        <Tabs active={tab} counts={counts} onChange={onTabChange} />
+      </div>
       {body}
       {group.done.length > 0 && (
         <DoneSection

@@ -25,7 +25,11 @@ export type FloatWindowSettings = {
   open: boolean          // 悬浮窗是否打开
   alwaysOnTop: boolean   // 置顶：盖在其它窗口上面
   locked: boolean        // 固定：不能拖动、不能改大小
+  opacity: number        // 不透明度，FLOAT_OPACITY_MIN–1
 }
+
+/** 悬浮窗最低不透明度：再低就看不清字了。 */
+export const FLOAT_OPACITY_MIN = 0.3
 
 /**
  * AI 接口格式：openai = OpenAI 兼容（{地址}/chat/completions）；
@@ -80,8 +84,9 @@ export type AiAction =
 /**
  * unmatched：用户提到了、但在现有待办里对不上的说法。
  * heard：输入是语音时 AI 听写出的原话（没听写出来为 null）；输入是文字时为 null。
+ * reply：AI 用助理口吻回的一句话（没有为 null）。
  */
-export type AiCommandResult = { actions: AiAction[]; unmatched: string[]; heard: string | null }
+export type AiCommandResult = { actions: AiAction[]; unmatched: string[]; heard: string | null; reply: string | null }
 
 export type SummaryResult = {
   headline: string

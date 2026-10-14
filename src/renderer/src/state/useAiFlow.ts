@@ -17,6 +17,12 @@ import { type DraftItem, type DraftPatch, draftToTask, pickableItems, toDraftIte
 import { createTask, restoreAt, withoutIds } from '../lib/taskOps'
 import type { TasksController } from './useTasks'
 
+/** 助理面板里的一来一回：用户说了什么（带引号的原话或「一段 N 秒的语音」）和助理回的话。 */
+export type Exchange = { id: string; said: string; reply: string }
+
+// 只留最近这么多条，只在内存里，不发给 AI。
+const LOG_LIMIT = 30
+
 /** 已经直接执行的改动和提示文字；id 用来在用户从提示条撤销后把它从卡片上去掉。 */
 export type Applied = { id: string; message: string; changes: TaskChange[] }
 
@@ -43,6 +49,8 @@ export type AiStage =
 
 export type AiFlow = {
   stage: AiStage
+  /** 这次打开程序以来的对话，最早的在前。 */
+  log: Exchange[]
   /** 发起一次 AI 指令（原话已经 trim、非空）。 */
   start: (script: string) => void
   /** 用一段录音发起 AI 指令。 */
@@ -92,7 +100,15 @@ function resultMessage(added: number, deleted: number): string {
  */
 export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
   const [stage, setStage] = useState<AiStage>({ kind: 'idle' })
+  const [log, setLog] = useState<Exchange[]>([])
   const requestRef = useRef<string | null>(null)
+
+  // AI 没写回复时，用直接执行的说明顶上；都没有就不记。
+  function remember(said: Said, reply: string | null): void {
+    if (reply === null || reply === '') return
+    const entry: Exchange = { id: crypto.randomUUID(), said: quoteOf(said), reply }
+    setLog((current) => [...current, entry].slice(-LOG_LIMIT))
+  }
 
   function cancelRequest(requestId: string): void {
     requestRef.current = null
@@ -139,6 +155,7 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
 
   function receive(said: Said, result: AiCommandResult): void {
     const applied = applyDirect(result)
+    remember(said, result.reply ?? applied?.message ?? null)
     const current = tasks.snapshot() ?? []
     const items = result.actions.flatMap((action) => (action.op === 'add' ? [toDraftItem(action.item)] : []))
     const deletes = result.actions.flatMap((action) => {
@@ -270,6 +287,7 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
 
   return {
     stage,
+    log,
     start,
     startVoice,
     cancelThinking,
