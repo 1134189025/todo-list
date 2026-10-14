@@ -1,0 +1,47 @@
+/* AI 卡片共用的入场动画：ThinkingCard、ConfirmCard、NoticeCard 都用它。 */
+@keyframes ai-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* AI 卡片共用的按钮：主按钮薄荷色，次要和「取消」都是灰绿。 */
+.ai-card-button {
+  flex: none;
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: var(--color-mint);
+  color: var(--color-mint-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-card-button.is-secondary {
+  background: var(--color-done-bg);
+  color: var(--color-ink-secondary);
+  font-weight: 400;
+}
+
+.ai-card-button.is-ghost {
+  padding: 0 14px;
+  background: transparent;
+  color: var(--color-ink-secondary);
+  font-weight: 400;
+}
+
+.ai-card-button:disabled {
+  background: var(--color-border-subtle);
+  color: var(--color-ink-muted);
+  cursor: default;
+}
+
+.ai-card-button:hover:not(:disabled) {
+  filter: brightness(0.98);
+}

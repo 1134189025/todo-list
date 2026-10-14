@@ -1,0 +1,62 @@
+:root {
+  color-scheme: light;
+
+  --color-window: #EDF3EE;
+  --color-surface: #F8FBF7;
+  --color-card: #FFFFFF;
+  --color-border: #DCE6E0;
+  --color-border-subtle: #E3ECE6;
+  --color-divider: #EEF3EF;
+  --color-mint: #8CCFB0;
+  --color-mint-deep: #5E9E82;
+  --color-mint-ink: #1F3A2E;
+  --color-mint-soft: #CDEBDC;
+  --color-leaf-line: #24614A;
+  --color-sprout-bg: #E4F3EA;
+  --color-sprout-leaf: #BFE4D0;
+  --color-peach-accent: #D9825E;
+  --color-caption-hover: #E0E9E3;
+  --color-backdrop: rgba(36, 51, 44, 0.32);
+  --color-ink: #24332C;
+  --color-ink-muted: #5F6F67;
+  --color-ink-secondary: #44544C;
+  --color-ink-disabled: #8FA39A;
+  --color-placeholder: #66756D;
+  --color-done-bg: #EEF4EF;
+  --color-done-line: #9DB3A8;
+  --color-hover-ring: #C9DDD2;
+  --color-track: #E2ECE5;
+  --color-tab-track: #E7EFEA;
+  --color-quiet: #F4F8F3;
+  --color-toast-action: #3A4A42;
+  --color-ai-bg: #EEF5FB;
+  --color-ai-border: #A9CBEA;
+  --color-ai-mid: #D3E3F2;
+  --color-ai-deep: #2C5679;
+  --color-ai-row-bg: #F4F8FD;
+  --color-ai-row-border: #C9DDF0;
+  --color-ai-open-bg: #E3EEF8;
+  --color-ai-open-ring: #6FA3D2;
+  --color-ai-pill: #DFEBF7;
+  --color-ai-skeleton: #EEF3F8;
+  --color-peach: #FCE6D7;
+  --color-peach-text: #8A4A26;
+  --color-danger: #B3412A;
+
+  --shadow-composer: 0 8px 28px rgba(36, 97, 74, 0.08);
+  --shadow-row-hover: 0 4px 14px rgba(36, 97, 74, 0.06);
+  --shadow-tab: 0 1px 2px rgba(36, 51, 44, 0.1);
+  --shadow-toast: 0 8px 24px rgba(36, 51, 44, 0.2);
+  --shadow-dialog: 0 24px 64px rgba(36, 51, 44, 0.22);
+  --shadow-ai-card: 0 12px 32px rgba(44, 86, 121, 0.1);
+  --shadow-popover: 0 16px 40px rgba(36, 51, 44, 0.16);
+
+  --font-body: 'Segoe UI Variable Text', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --font-display: 'ZCOOL XiaoWei', 'Noto Serif SC', serif;
+
+  --radius-button: 8px;
+  --radius-row: 10px;
+  --radius-card: 12px;
+  --radius-input: 18px;
+  --radius-pill: 999px;
+}

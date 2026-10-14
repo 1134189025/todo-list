@@ -1,0 +1,15 @@
+.auto-summary-time {
+  flex: none;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-button);
+  background: var(--color-card);
+  font-size: 14px;
+  color: var(--color-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.auto-summary-time:disabled {
+  opacity: 0.5;
+}

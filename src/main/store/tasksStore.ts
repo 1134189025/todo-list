@@ -1,0 +1,154 @@
+import { promises as fs } from 'node:fs'
+import {
+  copyToCorruptBackup,
+  createQueuedWriter,
+  errorCode,
+  quarantineCorruptFile,
+  type QueuedWriter
+} from './atomicFile'
+import { fail, ok } from '@shared/result'
+import type { Result } from '@shared/api'
+import { isRecord, validateTask } from '@shared/validate'
+import type { Task } from '@shared/types'
+
+const FILE_VERSION = 1
+
+export type LoadedTasks = { tasks: Task[]; corruptBackup: string | null; skipped: number }
+
+export type TasksStore = {
+  initialize(): Promise<Result<null>>
+  load(): Promise<Result<LoadedTasks>>
+  save(tasks: Task[]): Promise<Result<null>>
+  snapshot(): Task[]
+  flush(): Promise<void>
+}
+
+type FileOutcome = { kind: 'corrupt' } | { kind: 'readable'; tasks: Task[]; skipped: number }
+
+// 整个文件读不懂（坏 JSON、不是对象、版本不对、tasks 不是数组）才算 corrupt；
+// 单条不合法或 id 重复的只跳过那一条，重复保留第一条。
+function parseTasksFile(raw: string): FileOutcome {
+  let data: unknown
+  try {
+    data = JSON.parse(raw)
+  } catch {
+    return { kind: 'corrupt' }
+  }
+  if (!isRecord(data) || data.version !== FILE_VERSION || !Array.isArray(data.tasks)) {
+    return { kind: 'corrupt' }
+  }
+  const entries: unknown[] = data.tasks
+  const tasks: Task[] = []
+  const seenIds = new Set<string>()
+  let skipped = 0
+  for (const entry of entries) {
+    const checked = validateTask(entry)
+    if (!checked.ok || seenIds.has(checked.value.id)) {
+      skipped += 1
+      continue
+    }
+    seenIds.add(checked.value.id)
+    tasks.push(checked.value)
+  }
+  return { kind: 'readable', tasks, skipped }
+}
+
+function serialize(tasks: Task[]): string {
+  return `${JSON.stringify({ version: FILE_VERSION, tasks }, null, 2)}\n`
+}
+
+export function createTasksStore(filePath: string): TasksStore {
+  const writer: QueuedWriter = createQueuedWriter(filePath)
+  let tasks: Task[] = []
+  let writable = false
+  let corruptBackup: string | null = null
+  let skipped = 0
+  // 部分任务被跳过、且原文件还没备份成功时为 true：此时不允许覆盖原文件。
+  let backupPending = false
+  let initialized: Promise<Result<null>> | null = null
+
+  async function backupOriginal(): Promise<boolean> {
+    try {
+      corruptBackup = await copyToCorruptBackup(filePath)
+      backupPending = false
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function recoverWholeFile(): Promise<Result<null>> {
+    try {
+      corruptBackup = await quarantineCorruptFile(filePath)
+    } catch {
+      return fail('IO', '数据文件已损坏且无法备份，为保护原文件已暂停保存')
+    }
+    tasks = []
+    skipped = 0
+    writable = true
+    return ok(null)
+  }
+
+  async function readAndRecover(): Promise<Result<null>> {
+    let raw: string
+    try {
+      raw = await fs.readFile(filePath, 'utf8')
+    } catch (error) {
+      if (errorCode(error) === 'ENOENT') {
+        tasks = []
+        writable = true
+        return ok(null)
+      }
+      return fail('IO', '读取任务数据失败')
+    }
+    const outcome = parseTasksFile(raw)
+    if (outcome.kind === 'corrupt') return recoverWholeFile()
+    tasks = outcome.tasks
+    skipped = outcome.skipped
+    writable = true
+    if (skipped === 0) return ok(null)
+    if (!(await backupOriginal())) {
+      backupPending = true
+      return ok(null)
+    }
+    // 备份已存在，写回清理后的列表；写回失败时原文件和备份都还在，之后的保存会再写。
+    await writer.write(serialize(tasks))
+    return ok(null)
+  }
+
+  function ensureInitialized(): Promise<Result<null>> {
+    if (initialized === null) {
+      initialized = readAndRecover().then((result) => {
+        if (!result.ok) initialized = null
+        return result
+      })
+    }
+    return initialized
+  }
+
+  return {
+    initialize(): Promise<Result<null>> {
+      return ensureInitialized()
+    },
+    async load(): Promise<Result<LoadedTasks>> {
+      const result = await ensureInitialized()
+      if (!result.ok) return result
+      return ok({ tasks: [...tasks], corruptBackup, skipped })
+    },
+    async save(next: Task[]): Promise<Result<null>> {
+      if (!writable) return fail('IO', '任务数据还没有读取成功，暂不保存')
+      tasks = next
+      if (backupPending && !(await backupOriginal())) {
+        return fail('IO', '数据文件还没有备份，为保护原文件暂不保存')
+      }
+      const result = await writer.write(serialize(next))
+      return result.ok ? ok(null) : fail('IO', result.message)
+    },
+    snapshot(): Task[] {
+      return [...tasks]
+    },
+    flush(): Promise<void> {
+      return writer.flush()
+    }
+  }
+}

@@ -1,0 +1,92 @@
+.thinking-card {
+  min-width: 0;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: var(--radius-input);
+  background: var(--color-card);
+  box-shadow: 0 0 0 1.5px var(--color-ai-border), var(--shadow-ai-card);
+  animation: ai-card-rise 220ms ease-out;
+}
+
+.thinking-card-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.thinking-card-icon {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-ai-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ai-breathe 1.2s ease-in-out infinite;
+}
+
+.thinking-card-title {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-ai-deep);
+}
+
+.thinking-card-quote {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-row);
+  background: var(--color-quiet);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-ink-muted);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.thinking-card-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.thinking-card-bar {
+  height: 40px;
+  border-radius: var(--radius-row);
+  background: var(--color-ai-skeleton);
+  animation: ai-breathe 1.2s ease-in-out infinite;
+}
+
+.thinking-card-bar.is-short {
+  width: 70%;
+}
+
+.thinking-card-bar.is-delay-1 {
+  animation-delay: 0.15s;
+}
+
+.thinking-card-bar.is-delay-2 {
+  animation-delay: 0.3s;
+}
+
+.thinking-card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+@keyframes ai-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}

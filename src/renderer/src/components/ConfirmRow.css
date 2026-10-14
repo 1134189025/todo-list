@@ -1,0 +1,95 @@
+.confirm-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 0 0;
+  border-radius: var(--radius-row);
+  background: var(--color-card);
+  box-shadow: 0 0 0 1px var(--color-border-subtle);
+}
+
+.confirm-row.is-off {
+  background: var(--color-quiet);
+  box-shadow: none;
+}
+
+.confirm-row-check {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.confirm-row-check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-mint-deep);
+  cursor: pointer;
+}
+
+.confirm-row-title {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 15px;
+  color: var(--color-ink);
+  text-overflow: ellipsis;
+}
+
+.confirm-row.is-off .confirm-row-title {
+  color: var(--color-ink-muted);
+  text-decoration: line-through;
+}
+
+.confirm-row-when {
+  height: 30px;
+  max-width: 45%;
+  min-width: 0;
+  flex: none;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-ai-bg);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ai-deep);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.confirm-row-when[aria-expanded='true'] {
+  background: var(--color-ai-pill);
+  box-shadow: 0 0 0 1.5px var(--color-ai-open-ring);
+}
+
+.confirm-row-remove {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--color-ink-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-row-remove:hover {
+  background: var(--color-done-bg);
+}

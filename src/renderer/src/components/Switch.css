@@ -1,0 +1,32 @@
+.switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-card);
+  box-shadow: inset 0 0 0 1.5px var(--color-ink-disabled);
+}
+
+.switch.is-on {
+  background: var(--color-mint-deep);
+  box-shadow: none;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-ink-muted);
+  transition: transform 150ms ease, background-color 150ms ease;
+}
+
+.switch.is-on .switch-knob {
+  transform: translateX(20px);
+  background: var(--color-card);
+}

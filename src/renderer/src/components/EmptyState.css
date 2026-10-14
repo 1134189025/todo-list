@@ -1,0 +1,53 @@
+.empty-state {
+  padding: 16px 0 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.empty-state-art {
+  flex: none;
+}
+
+.empty-state-disc {
+  fill: var(--color-sprout-bg);
+}
+
+.empty-state-line {
+  stroke: var(--color-leaf-line);
+}
+
+.empty-state-leaf {
+  fill: var(--color-sprout-leaf);
+}
+
+.empty-state-pot {
+  fill: var(--color-peach);
+}
+
+.empty-state-spark {
+  stroke: var(--color-peach-accent);
+}
+
+.empty-state-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--color-ink);
+}
+
+.empty-state-sub {
+  margin: 0;
+  font-size: 14px;
+  color: var(--color-ink-muted);
+}
+
+.empty-state-text {
+  margin: 0;
+  padding: 28px 0;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-ink-muted);
+}

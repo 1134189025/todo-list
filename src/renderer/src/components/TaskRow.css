@@ -1,0 +1,154 @@
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 8px 2px 4px;
+  border-radius: var(--radius-row);
+  background: var(--color-card);
+  box-shadow: 0 0 0 1px var(--color-border-subtle);
+  transition: box-shadow 150ms ease;
+}
+
+.task-row:hover {
+  box-shadow: 0 0 0 1px var(--color-hover-ring), var(--shadow-row-hover);
+}
+
+.task-row.is-done {
+  background: var(--color-done-bg);
+  box-shadow: none;
+}
+
+.task-row.is-fresh {
+  background: var(--color-ai-row-bg);
+  box-shadow: 0 0 0 1px var(--color-ai-row-border);
+  animation: task-row-rise 220ms ease-out;
+}
+
+@keyframes task-row-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.task-row-check {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-row-circle {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid var(--color-mint-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-mint-ink);
+}
+
+.task-row.is-done .task-row-circle {
+  border-color: var(--color-mint);
+  background: var(--color-mint);
+}
+
+.task-row-body {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-row.is-done .task-row-body {
+  padding: 11px 0;
+}
+
+.task-row-title-line {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-row-title {
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--color-ink);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-row.is-done .task-row-title {
+  font-size: 14px;
+  color: var(--color-ink-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-done-line);
+}
+
+.task-row-ai {
+  flex: none;
+  display: inline-flex;
+}
+
+.task-row-when {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.task-row-when.is-overdue {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-peach);
+  color: var(--color-peach-text);
+}
+
+.task-row-delete {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--color-ink-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 150ms ease, background-color 150ms ease;
+}
+
+.task-row-delete:hover {
+  background: var(--color-done-bg);
+}
+
+.task-row:hover .task-row-delete,
+.task-row:focus-within .task-row-delete {
+  opacity: 1;
+}

@@ -1,0 +1,58 @@
+/* 系统的最小化 / 最大化 / 关闭按钮由 titleBarOverlay 绘制在右上角。
+   titlebar-area-* 是 Window Controls Overlay 提供的可用区域，不支持时按 3 个 46px 的系统按钮预留。 */
+.title-bar {
+  -webkit-app-region: drag;
+  flex: none;
+  height: 44px;
+  margin-left: env(titlebar-area-x, 0px);
+  width: env(titlebar-area-width, calc(100% - 138px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 16px;
+  user-select: none;
+}
+
+.title-bar-logo {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: 6px;
+  background: var(--color-mint);
+  color: var(--color-mint-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title-bar-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.title-bar-button {
+  -webkit-app-region: no-drag;
+  width: 46px;
+  height: 44px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.title-bar-button:hover {
+  background: var(--color-caption-hover);
+}
+
+.title-bar-button:focus-visible {
+  outline-offset: -2px;
+}

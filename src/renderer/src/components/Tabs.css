@@ -1,0 +1,35 @@
+.tabs {
+  margin-top: 10px;
+  align-self: flex-start;
+  max-width: 100%;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-row);
+  background: var(--color-tab-track);
+}
+
+.tabs-item {
+  height: 34px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-button);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  font-size: 14px;
+  color: var(--color-ink);
+}
+
+.tabs-item.is-active {
+  background: var(--color-card);
+  font-weight: 600;
+  box-shadow: var(--shadow-tab);
+}
+
+.tabs-count {
+  font-size: 12px;
+  color: var(--color-ink-muted);
+  font-variant-numeric: tabular-nums;
+}

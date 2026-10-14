@@ -1,0 +1,38 @@
+.ai-form {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ai-form-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ai-form-label {
+  font-size: 13px;
+  color: var(--color-ink-secondary);
+}
+
+.ai-form-key-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ai-form-hint {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--color-ink-muted);
+}
+
+.ai-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
