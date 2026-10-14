@@ -127,8 +127,9 @@ playwright-core 的 `_electron.launch` 在 Electron 44 上会报 "Process failed
 - 启动方式：上面第 1–3 步
 - 在 Linux 云容器里跑（没有 Windows 时）：`node node_modules/electron/install.js` 下载 Electron 二进制；safeStorage 需要解锁的
   keyring（容器里 `apt-get install gnome-keyring`），否则保存 Key 会被拒绝。启动（挡板安静模式）：
-  `QINGXIN_SANDBOX=1 QINGXIN_DATA_DIR=<临时目录>/data QINGXIN_SANDBOX_QUIET=1 dbus-run-session -- sh -c "printf x | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1; exec xvfb-run -a -s '-screen 0 1600x1000x24' node_modules/electron/dist/electron . --no-sandbox --password-store=gnome-libsecret --remote-debugging-port=<端口>"`，
-  再 `chromium.connectOverCDP`。用 detached 启动、按进程组结束（只杀 xvfb-run 会留下 electron）。Linux 上验不了托盘和 Windows 窗口行为。
+  `QINGXIN_SANDBOX=1 QINGXIN_DATA_DIR=<临时目录>/data QINGXIN_SANDBOX_QUIET=1 XDG_DATA_HOME=<临时目录>/xdg dbus-run-session -- sh -c "printf x | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1; exec xvfb-run -a -s '-screen 0 1600x1000x24' node_modules/electron/dist/electron . --no-sandbox --password-store=gnome-libsecret --remote-debugging-port=<端口>"`，
+  再 `chromium.connectOverCDP`。`XDG_DATA_HOME` 让 keyring 建在自己的临时目录里：共用的 `~/.local/share/keyrings/login.keyring`
+  可能是别人用另一个密码建的，解不开时 `encryptionAvailable` 为 false，保存 Key 会被拒。用 detached 启动、按进程组结束（只杀 xvfb-run 会留下 electron）。Linux 上验不了托盘和 Windows 窗口行为。
 - 造数据：直接写 `tasks.json` / `settings.json`（设置里的 Key 只能通过界面填假值，因为是加密存的）
 - 配方：暂无
 - 挡板下验不了、只能用户在真实环境确认的：真实 AI 服务的整理准确率和总结质量、开机自动打开、系统通知及点击跳转、

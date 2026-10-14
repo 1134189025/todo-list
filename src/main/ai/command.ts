@@ -119,10 +119,12 @@ function readActions(reply: Record<string, unknown>, candidates: Task[]): Result
   return ok({ actions, unmatched })
 }
 
-// 语音输入时 AI 听写出的原话；压成一行、截断，空的当没听清。
+// 语音输入时 AI 听写出的原话；去掉看不见的格式字符（方向控制符会把引语镜像、零宽字符会藏字），
+// 其它控制字符当空格，压成一行、截断，空的当没听清。
 function readHeard(reply: Record<string, unknown>): string | null {
   if (typeof reply.heard !== 'string') return null
-  const heard = truncateText(oneLine(reply.heard), HEARD_MAX)
+  const visible = reply.heard.replace(/\p{Cf}/gu, '').replace(/\p{Cc}/gu, ' ')
+  const heard = truncateText(oneLine(visible), HEARD_MAX)
   return heard === '' ? null : heard
 }
 
