@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { type AiFlow, type AiStage, confirmCount } from '../state/useAiFlow'
+import { type AiFlow, type AiStage, confirmCount, quoteOf } from '../state/useAiFlow'
 import { ConfirmDeleteRow } from './ConfirmDeleteRow'
 import { ConfirmRow } from './ConfirmRow'
 import { SparkIcon } from './icons'
@@ -19,7 +19,8 @@ function headline(added: number, deleted: number): string {
 
 /** AI 指令里要确认的部分：新建（可改标题和时间）和删除（勾选才删）；直接执行过的和没对上的在上面说明。 */
 export function ConfirmCard({ flow, stage, today }: ConfirmCardProps) {
-  const [showRaw, setShowRaw] = useState(false)
+  // 语音指令默认展开 AI 听到的原话，方便核对有没有听错。
+  const [showRaw, setShowRaw] = useState(stage.clip !== null)
   const { items, deletes, applied, unmatched } = stage
   const count = confirmCount(stage)
   const hasDeletes = deletes.length > 0
@@ -45,7 +46,7 @@ export function ConfirmCard({ flow, stage, today }: ConfirmCardProps) {
           {showRaw ? '收起原话' : '查看原话'}
         </button>
       </div>
-      {showRaw && <p className="confirm-card-raw">“{stage.script}”</p>}
+      {showRaw && <p className="confirm-card-raw">{quoteOf(stage)}</p>}
       {applied !== null && (
         <p className="confirm-card-note" role="status">
           {applied.message}

@@ -27,9 +27,21 @@ export type FloatWindowSettings = {
   locked: boolean        // 固定：不能拖动、不能改大小
 }
 
+/**
+ * AI 接口格式：openai = OpenAI 兼容（{地址}/chat/completions）；
+ * gemini = Gemini 原生（{地址}/v1beta/models/{模型}:generateContent），能传语音，并请求低思考档。
+ */
+export type AiApiFormat = 'openai' | 'gemini'
+
+/** 一段录音：16 kHz 单声道 16 位 WAV 的 base64。 */
+export type VoiceClip = { mimeType: 'audio/wav'; data: string; seconds: number }
+
+/** AI 指令的输入：打的字，或一段录音。 */
+export type CommandInput = { kind: 'text'; text: string } | { kind: 'audio'; clip: VoiceClip }
+
 export type PublicSettings = {
   // hasApiKey：有可用的 Key；keyUnreadable：文件里有 Key 但解不开（换了电脑或系统账户），需要重新填写
-  ai: { baseUrl: string; model: string; hasApiKey: boolean; keyUnreadable: boolean }
+  ai: { baseUrl: string; model: string; apiFormat: AiApiFormat; hasApiKey: boolean; keyUnreadable: boolean }
   autoSummary: { enabled: boolean; time: string }   // 'HH:mm'
   openAtLogin: boolean
   encryptionAvailable: boolean
@@ -43,7 +55,7 @@ export type PublicSettings = {
 }
 
 export type SettingsPatch = {
-  ai?: { baseUrl: string; model: string }
+  ai?: { baseUrl: string; model: string; apiFormat?: AiApiFormat }   // apiFormat 不传 = 不改
   autoSummary?: { enabled: boolean; time: string }
   openAtLogin?: boolean
   voiceHotkey?: string | null   // 不合法返回 HOTKEY_INVALID；注册失败返回 HOTKEY_TAKEN 且保留旧的
@@ -65,8 +77,11 @@ export type AiAction =
   | { op: 'rename'; id: string; title: string }
   | { op: 'delete'; id: string }
 
-/** unmatched：用户提到了、但在现有待办里对不上的说法。 */
-export type AiCommandResult = { actions: AiAction[]; unmatched: string[] }
+/**
+ * unmatched：用户提到了、但在现有待办里对不上的说法。
+ * heard：输入是语音时 AI 听写出的原话（没听写出来为 null）；输入是文字时为 null。
+ */
+export type AiCommandResult = { actions: AiAction[]; unmatched: string[]; heard: string | null }
 
 export type SummaryResult = {
   headline: string
@@ -91,12 +106,21 @@ export interface QingxinApi {
     clearApiKey(): Promise<Result<PublicSettings>>
   }
   ai: {
-    // 一句话里的新建、完成、取消完成、改时间、改标题、删除，一次识别出来
-    command(req: { requestId: string; text: string }): Promise<Result<AiCommandResult>>
+    // 一句话（打字或一段录音）里的新建、完成、取消完成、改时间、改标题、删除，一次识别出来；
+    // 录音只能走 Gemini 原生接口
+    command(
+      req: { requestId: string; text: string } | { requestId: string; audio: VoiceClip }
+    ): Promise<Result<AiCommandResult>>
     summarize(req: { requestId: string }): Promise<Result<SummaryResult>>
     // draft 不传 = 用已保存的配置；draft.apiKey 不传 = 用已保存的 Key，
-    // 但只在 draft 地址和已保存地址是同一个站点（协议 + 主机 + 端口）时才用，免得把 Key 发给另一家服务
-    testConnection(draft?: { baseUrl: string; model: string; apiKey?: string }): Promise<Result<{ model: string }>>
+    // 但只在 draft 地址和已保存地址是同一个站点（协议 + 主机 + 端口）时才用，免得把 Key 发给另一家服务；
+    // draft.apiFormat 不传 = 用已保存的格式
+    testConnection(draft?: {
+      baseUrl: string
+      model: string
+      apiFormat?: AiApiFormat
+      apiKey?: string
+    }): Promise<Result<{ model: string }>>
     cancel(requestId: string): Promise<Result<null>>
   }
   events: {

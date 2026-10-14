@@ -11,7 +11,7 @@ import { SummaryPanel } from './components/SummaryPanel'
 import { TaskPanel } from './components/TaskPanel'
 import { TitleBar } from './components/TitleBar'
 import { Toast } from './components/Toast'
-import { VoiceNotice } from './components/VoiceNotice'
+import { VoiceCard } from './components/VoiceCard'
 import { isAiConfigured } from './lib/aiForm'
 import { createTask, restoreAt, toggleDone, withoutIds } from './lib/taskOps'
 import { type TabKey } from './lib/taskView'
@@ -22,7 +22,7 @@ import { useSummary } from './state/useSummary'
 import { useTasks } from './state/useTasks'
 import { useToast } from './state/useToast'
 import { useToday } from './state/useToday'
-import { useVoice } from './state/useVoice'
+import { useVoice, type VoiceAvailability } from './state/useVoice'
 
 const NO_WHEN: ComposerWhen = { date: null, time: null }
 
@@ -53,6 +53,11 @@ export function App() {
   const configured = isAiConfigured(settings.settings)
   const accelerator = settings.settings === null ? null : settings.settings.voiceHotkey.accelerator
   const composerMode: ComposerMode = chosenMode ?? (configured ? 'ai' : 'manual')
+  const voiceAvailability: VoiceAvailability = !configured
+    ? 'not-configured'
+    : settings.settings?.ai.apiFormat === 'gemini'
+      ? 'ok'
+      : 'needs-gemini'
   const floatToggle = useFloatToggle(settings.settings, settings.save)
 
   function addTasks(created: Task[], message: string): void {
@@ -63,7 +68,15 @@ export function App() {
   }
 
   const aiFlow = useAiFlow({ tasks, restoreDraft: setDraft, today })
-  const voice = useVoice(accelerator, settingsOpen || aiFlow.stage.kind !== 'idle')
+  const voice = useVoice({
+    accelerator,
+    blocked: settingsOpen || aiFlow.stage.kind !== 'idle',
+    availability: voiceAvailability,
+    onClip: (clip) => {
+      setNotice(null)
+      aiFlow.startVoice(clip)
+    }
+  })
   const summary = useSummary(list, today)
 
   useEffect(() => window.api.events.onSummaryShow((shown) => {
@@ -163,10 +176,10 @@ export function App() {
   const composer = (
     <>
       {toast.toast !== null && <Toast message={toast.toast.message} onUndo={toast.undo} />}
-      {voice.voiceOpen ? (
-        <VoiceNotice onDismiss={voice.closeVoice} />
+      {voice.state.kind !== 'idle' ? (
+        <VoiceCard voice={voice} accelerator={accelerator} onOpenSettings={() => setSettingsOpen(true)} />
       ) : aiFlow.stage.kind !== 'idle' ? (
-        <AiCard flow={aiFlow} today={today} onOpenSettings={() => setSettingsOpen(true)} />
+        <AiCard flow={aiFlow} today={today} onOpenSettings={() => setSettingsOpen(true)} onVoiceAgain={voice.toggle} />
       ) : (
         <Composer
           value={draft}
@@ -183,7 +196,7 @@ export function App() {
           onModeChange={setChosenMode}
           onWhenChange={setWhen}
           onSubmit={submitDraft}
-          onVoice={voice.openVoice}
+          onVoice={voice.toggle}
         />
       )}
     </>
