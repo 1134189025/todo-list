@@ -1,4 +1,5 @@
 import type { FloatWindowSettings, SettingsPatch } from './api'
+import type { TaskPatch } from './taskPatch'
 import { isDateKey, isIsoTimestamp, isTimeKey } from './dates'
 import { TITLE_MAX } from './text'
 import type { Task, TaskSource } from './types'
@@ -89,18 +90,35 @@ export function validateTask(value: unknown): Validation<Task> {
   return valid({ id, title, done, dueDate, dueTime, createdAt, completedAt, source })
 }
 
-export function validateTaskList(value: unknown): Validation<Task[]> {
-  if (!Array.isArray(value)) return invalid('任务列表格式不正确')
-  const tasks: Task[] = []
-  const seenIds = new Set<string>()
-  for (const [index, item] of value.entries()) {
-    const result = validateTask(item)
-    if (!result.ok) return invalid(`第 ${index + 1} 条：${result.message}`)
-    if (seenIds.has(result.value.id)) return invalid(`第 ${index + 1} 条：任务 id 重复`)
-    seenIds.add(result.value.id)
-    tasks.push(result.value)
+const PATCH_MAX = 5000
+
+export function validateTaskPatch(value: unknown): Validation<TaskPatch> {
+  if (!isRecord(value)) return invalid('任务改动格式不正确')
+  const { added, updated, removedIds } = value
+  if (!Array.isArray(added) || !Array.isArray(updated) || !Array.isArray(removedIds)) {
+    return invalid('任务改动格式不正确')
   }
-  return valid(tasks)
+  if (added.length + updated.length + removedIds.length > PATCH_MAX) return invalid('一次改动的任务太多')
+  const patch: TaskPatch = { added: [], updated: [], removedIds: [] }
+  for (const entry of added as unknown[]) {
+    if (!isRecord(entry) || typeof entry.index !== 'number' || !Number.isInteger(entry.index) || entry.index < 0) {
+      return invalid('新加任务的位置不合法')
+    }
+    const task = validateTask(entry.task)
+    if (!task.ok) return invalid(task.message)
+    patch.added.push({ task: task.value, index: entry.index })
+  }
+  for (const entry of updated as unknown[]) {
+    const task = validateTask(entry)
+    if (!task.ok) return invalid(task.message)
+    patch.updated.push(task.value)
+  }
+  for (const entry of removedIds as unknown[]) {
+    const id = boundedText(entry, 1, ID_MAX)
+    if (id === null) return invalid('任务 id 不合法')
+    patch.removedIds.push(id)
+  }
+  return valid(patch)
 }
 
 export function validateSettingsPatch(value: unknown): Validation<SettingsPatch> {

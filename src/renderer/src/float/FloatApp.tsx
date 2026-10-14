@@ -1,5 +1,4 @@
 import { useState, type KeyboardEvent } from 'react'
-import type { FloatWindowSettings } from '@shared/api'
 import { todayProgress } from '@shared/dates'
 import { truncateTitle } from '@shared/text'
 import type { Task } from '@shared/types'
@@ -8,6 +7,7 @@ import { callApi } from '../lib/callApi'
 import { formatTaskWhen } from '../lib/labels'
 import { createTodayTask, toggleDone } from '../lib/taskOps'
 import { buildTaskView } from '../lib/taskView'
+import { useFloatToggle } from '../state/useFloatToggle'
 import { useSettings } from '../state/useSettings'
 import { useTasks } from '../state/useTasks'
 import { useToday } from '../state/useToday'
@@ -15,7 +15,6 @@ import { FloatTaskItem } from './FloatTaskItem'
 import './FloatApp.css'
 
 const MAX_LENGTH = 200
-const DEFAULT_FLOAT: FloatWindowSettings = { open: true, alwaysOnTop: true, locked: false }
 
 // 悬浮窗里没有撤销提示条：勾选可以再点一次取消，添加的可以在主窗口删。
 function noToast(): void {}
@@ -27,13 +26,9 @@ export function FloatApp() {
   const settings = useSettings()
   const [draft, setDraft] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
-  const float = settings.settings?.floatWindow ?? DEFAULT_FLOAT
+  const floatToggle = useFloatToggle(settings.settings, settings.save)
+  const float = floatToggle.state
   const list = tasks.tasks
-
-  async function changeFloat(patch: Partial<FloatWindowSettings>): Promise<void> {
-    const result = await settings.save({ floatWindow: patch })
-    setActionError(result.ok ? null : result.error.message)
-  }
 
   async function openMain(): Promise<void> {
     const result = await callApi(() => window.api.app.showMain())
@@ -62,7 +57,7 @@ export function FloatApp() {
   }
 
   const progress = list === null ? null : todayProgress(list, today)
-  const error = actionError ?? tasks.saveError ?? tasks.loadError
+  const error = actionError ?? floatToggle.error ?? tasks.saveError ?? tasks.loadError
 
   return (
     <div className={float.locked ? 'float is-locked' : 'float'}>
@@ -80,7 +75,7 @@ export function FloatApp() {
             aria-label="置顶"
             aria-pressed={float.alwaysOnTop}
             title={float.alwaysOnTop ? '取消置顶' : '置顶'}
-            onClick={() => void changeFloat({ alwaysOnTop: !float.alwaysOnTop })}
+            onClick={() => floatToggle.toggle('alwaysOnTop')}
           >
             <PinIcon size={15} />
           </button>
@@ -90,7 +85,7 @@ export function FloatApp() {
             aria-label="固定"
             aria-pressed={float.locked}
             title={float.locked ? '取消固定' : '固定位置和大小'}
-            onClick={() => void changeFloat({ locked: !float.locked })}
+            onClick={() => floatToggle.toggle('locked')}
           >
             <LockIcon size={15} />
           </button>
@@ -108,7 +103,7 @@ export function FloatApp() {
             className="float-action"
             aria-label="关闭悬浮窗"
             title="关闭悬浮窗"
-            onClick={() => void changeFloat({ open: false })}
+            onClick={() => floatToggle.toggle('open')}
           >
             <CloseIcon size={12} />
           </button>

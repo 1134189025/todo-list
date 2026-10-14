@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC, type PublicSettings, type QingxinApi, type SummaryResult } from '@shared/api'
-import type { Task } from '@shared/types'
+import type { TasksSnapshot } from '@shared/taskPatch'
 
 function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
   const listener = (_event: unknown, payload: T): void => cb(payload)
@@ -13,7 +13,7 @@ function subscribe<T>(channel: string, cb: (payload: T) => void): () => void {
 const api: QingxinApi = {
   tasks: {
     load: () => ipcRenderer.invoke(IPC.tasksLoad),
-    save: (tasks) => ipcRenderer.invoke(IPC.tasksSave, tasks)
+    apply: (patch) => ipcRenderer.invoke(IPC.tasksApply, patch)
   },
   settings: {
     get: () => ipcRenderer.invoke(IPC.settingsGet),
@@ -30,7 +30,7 @@ const api: QingxinApi = {
   events: {
     onSummaryShow: (cb) => subscribe<SummaryResult>(IPC.summaryShow, cb),
     onVoiceHotkey: (cb) => subscribe<undefined>(IPC.voiceHotkey, () => cb()),
-    onTasksChanged: (cb) => subscribe<Task[]>(IPC.tasksChanged, cb),
+    onTasksChanged: (cb) => subscribe<TasksSnapshot>(IPC.tasksChanged, cb),
     onSettingsChanged: (cb) => subscribe<PublicSettings>(IPC.settingsChanged, cb)
   },
   app: {

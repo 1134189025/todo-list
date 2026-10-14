@@ -1,14 +1,14 @@
 import { BrowserWindow, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { IPC, type PublicSettings, type Result, type SummaryResult } from '@shared/api'
 import { fail, ok } from '@shared/result'
-import type { Task } from '@shared/types'
+import type { TasksSnapshot } from '@shared/taskPatch'
 import {
   validateApiKey,
   validateParseRequest,
   validateRequestId,
   validateSettingsPatch,
   validateSummarizeRequest,
-  validateTaskList,
+  validateTaskPatch,
   validateTestDraft
 } from '@shared/validate'
 import { cancelAiRequest, testAiConnection } from './ai/client'
@@ -43,11 +43,11 @@ function handle<T>(
   })
 }
 
-// 主窗口和悬浮窗各自持有一份任务列表：一边保存后，把新列表推给另一边。
-function broadcastTasks(tasks: Task[], from: WebContents): void {
+// 主窗口和悬浮窗各自持有一份任务列表：一边保存后，把合并后的新列表推给另一边。
+function broadcastTasks(snapshot: TasksSnapshot, from: WebContents): void {
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed() || win.webContents === from) continue
-    win.webContents.send(IPC.tasksChanged, tasks)
+    win.webContents.send(IPC.tasksChanged, snapshot)
   }
 }
 
@@ -61,12 +61,13 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   const { tasks, settings, settingsService } = deps
 
   handle(IPC.tasksLoad, () => tasks.load())
-  handle(IPC.tasksSave, (raw, event) => {
-    const checked = validateTaskList(raw)
+  handle(IPC.tasksApply, (raw, event) => {
+    const checked = validateTaskPatch(raw)
     if (!checked.ok) return invalidInput(checked.message)
-    const saving = tasks.save(checked.value)
-    broadcastTasks(tasks.snapshot(), event.sender)
-    return saving
+    // apply 同步合并进内存，紧接着把合并后的列表推给其它窗口；发起方从返回值里拿。
+    const applying = tasks.apply(checked.value)
+    broadcastTasks(tasks.versioned(), event.sender)
+    return applying
   })
 
   handle(IPC.settingsGet, () => settingsService.get())

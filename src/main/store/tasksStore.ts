@@ -9,18 +9,21 @@ import {
 } from './atomicFile'
 import { fail, ok } from '@shared/result'
 import type { Result } from '@shared/api'
+import { applyTaskPatch, type TaskPatch, type TasksSnapshot } from '@shared/taskPatch'
 import { isRecord, validateTask } from '@shared/validate'
 import type { Task } from '@shared/types'
 
 const FILE_VERSION = 1
 
-export type LoadedTasks = { tasks: Task[]; corruptBackup: string | null; skipped: number }
+export type LoadedTasks = TasksSnapshot & { corruptBackup: string | null; skipped: number }
 
 export type TasksStore = {
   initialize(): Promise<Result<null>>
   load(): Promise<Result<LoadedTasks>>
-  save(tasks: Task[]): Promise<Result<null>>
+  /** 把改动合并到内存里的最新列表（同步完成）再写盘；返回写完时内存里的列表。 */
+  apply(patch: TaskPatch): Promise<Result<TasksSnapshot & { saveError: string | null }>>
   snapshot(): Task[]
+  versioned(): TasksSnapshot
   flush(): Promise<void>
 }
 
@@ -61,6 +64,7 @@ function serialize(tasks: Task[]): string {
 export function createTasksStore(filePath: string): TasksStore {
   const writer: QueuedWriter = createQueuedWriter(filePath)
   let tasks: Task[] = []
+  let revision = 0
   let writable = false
   let corruptBackup: string | null = null
   let skipped = 0
@@ -127,6 +131,18 @@ export function createTasksStore(filePath: string): TasksStore {
     return initialized
   }
 
+  async function save(next: Task[]): Promise<Result<null>> {
+    if (!writable) return fail('IO', '任务数据还没有读取成功，暂不保存')
+    tasks = next
+    revision += 1
+    if (backupPending && !(await backupOriginal())) {
+      return fail('IO', '数据文件还没有备份，为保护原文件暂不保存')
+    }
+    // 等备份时可能又来了新的保存：总是写内存里最新的一份，不按到达顺序写旧的。
+    const result = await writer.write(serialize(tasks))
+    return result.ok ? ok(null) : fail('IO', result.message)
+  }
+
   return {
     initialize(): Promise<Result<null>> {
       return ensureInitialized()
@@ -134,20 +150,19 @@ export function createTasksStore(filePath: string): TasksStore {
     async load(): Promise<Result<LoadedTasks>> {
       const result = await ensureInitialized()
       if (!result.ok) return result
-      return ok({ tasks: [...tasks], corruptBackup, skipped })
+      return ok({ tasks: [...tasks], revision, corruptBackup, skipped })
     },
-    async save(next: Task[]): Promise<Result<null>> {
+    async apply(patch: TaskPatch): Promise<Result<TasksSnapshot & { saveError: string | null }>> {
       if (!writable) return fail('IO', '任务数据还没有读取成功，暂不保存')
-      tasks = next
-      if (backupPending && !(await backupOriginal())) {
-        return fail('IO', '数据文件还没有备份，为保护原文件暂不保存')
-      }
-      // 等备份时可能又来了新的保存：总是写内存里最新的一份，不按到达顺序写旧的。
-      const result = await writer.write(serialize(tasks))
-      return result.ok ? ok(null) : fail('IO', result.message)
+      const saved = await save(applyTaskPatch(tasks, patch))
+      // 写盘期间可能又合并了别的窗口的改动：返回此刻内存里的列表，它比之前推给任何窗口的都新。
+      return ok({ tasks: [...tasks], revision, saveError: saved.ok ? null : saved.error.message })
     },
     snapshot(): Task[] {
       return [...tasks]
+    },
+    versioned(): TasksSnapshot {
+      return { tasks: [...tasks], revision }
     },
     flush(): Promise<void> {
       return writer.flush()

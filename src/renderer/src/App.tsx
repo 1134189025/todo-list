@@ -16,6 +16,7 @@ import { isAiConfigured } from './lib/aiForm'
 import { createTask, restoreAt, toggleDone, withoutIds } from './lib/taskOps'
 import { type TabKey } from './lib/taskView'
 import { useAiFlow } from './state/useAiFlow'
+import { useFloatToggle } from './state/useFloatToggle'
 import { useSettings } from './state/useSettings'
 import { useSummary } from './state/useSummary'
 import { useTasks } from './state/useTasks'
@@ -52,7 +53,7 @@ export function App() {
   const configured = isAiConfigured(settings.settings)
   const accelerator = settings.settings === null ? null : settings.settings.voiceHotkey.accelerator
   const composerMode: ComposerMode = chosenMode ?? (configured ? 'ai' : 'manual')
-  const floatOpen = settings.settings?.floatWindow.open ?? false
+  const floatToggle = useFloatToggle(settings.settings, settings.save)
 
   function addTasks(created: Task[], message: string): void {
     const current = tasks.snapshot()
@@ -92,8 +93,8 @@ export function App() {
     const title = truncateTitle(script)
     const fallback = mode === 'ai' && !fallbackHinted.current
     if (fallback) fallbackHinted.current = true
-    // 手动添加用输入区选的日期和时间；AI 没配置时的直接添加算今天。
-    const picked = mode === 'direct' ? when : NO_WHEN
+    // 只有手动添加模式用输入区选的日期和时间（AI 模式下时间胶囊不显示，Ctrl+Enter 和没配置 AI 时的直接添加都算今天）。
+    const picked = mode === 'direct' && composerMode === 'manual' ? when : NO_WHEN
     const created = createTask(
       { title, dueDate: picked.date, dueTime: picked.date === null ? null : picked.time, source: 'manual' },
       new Date().toISOString()
@@ -124,10 +125,6 @@ export function App() {
       `已删除「${target.title}」`,
       (now) => restoreAt(now, target, index)
     )
-  }
-
-  function toggleFloat(): void {
-    void settings.save({ floatWindow: { open: !floatOpen } })
   }
 
   const summaryHeadline = summary.fresh && summary.summary !== null ? summary.summary.headline : null
@@ -209,7 +206,11 @@ export function App() {
 
   return (
     <>
-      <TitleBar floatOpen={floatOpen} onToggleFloat={toggleFloat} onOpenSettings={() => setSettingsOpen(true)} />
+      <TitleBar
+        floatOpen={floatToggle.state.open}
+        onToggleFloat={() => floatToggle.toggle('open')}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
       <AppShell main={main} composer={composer} drawer={drawer} drawerLabel="AI 今日总结" />
       <Dialog open={settingsOpen} title="设置" onRequestClose={() => setSettingsOpen(false)}>
         {settingsOpen ? (

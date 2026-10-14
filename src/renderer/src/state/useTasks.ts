@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { diffTasks, isEmptyPatch, type TasksSnapshot } from '@shared/taskPatch'
 import type { Task } from '@shared/types'
 import { callApi } from '../lib/callApi'
 
@@ -31,6 +32,29 @@ export function useTasks(showToast: ShowToast): TasksController {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [freshIds, setFreshIds] = useState<ReadonlySet<string>>(() => new Set())
   const latest = useRef<Task[] | null>(null)
+  // 收到过的主进程列表里版本号最大的一份，和还没收到结果的保存次数。
+  // 保存结果和推送的到达顺序不保证，只认版本号更大的；自己没有在途保存时就换成它，
+  // 两个窗口同时保存时各自也能拿到合并后的结果，不会一直对不上。
+  const serverLatest = useRef<TasksSnapshot | null>(null)
+  const pendingSaves = useRef(0)
+  const loaded = useRef(false)
+
+  // 读取完成、且自己没有在途保存时，显示收到过的最新一份。
+  const showNewest = useCallback((): void => {
+    const newest = serverLatest.current
+    if (!loaded.current || pendingSaves.current > 0 || newest === null) return
+    latest.current = newest.tasks
+    setTasks(newest.tasks)
+  }, [])
+
+  const receive = useCallback(
+    (snapshot: TasksSnapshot): void => {
+      const known = serverLatest.current
+      if (known === null || snapshot.revision > known.revision) serverLatest.current = snapshot
+      showNewest()
+    },
+    [showNewest]
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -40,26 +64,18 @@ export function useTasks(showToast: ShowToast): TasksController {
         setLoadError(result.error.message)
         return
       }
-      latest.current = result.data.tasks
-      setTasks(result.data.tasks)
+      loaded.current = true
+      receive({ tasks: result.data.tasks, revision: result.data.revision })
       setCorruptBackup(result.data.corruptBackup)
       setSkipped(result.data.skipped)
     })
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [receive])
 
-  // 另一个窗口（主窗口 / 悬浮窗）保存了任务：换成主进程里的最新列表。读取完成前收到的忽略，读取结果本身就是最新的。
-  useEffect(
-    () =>
-      window.api.events.onTasksChanged((next) => {
-        if (latest.current === null) return
-        latest.current = next
-        setTasks(next)
-      }),
-    []
-  )
+  // 另一个窗口（主窗口 / 悬浮窗）保存了任务。读取完成前、或自己还有在途保存时先记下，之后再换。
+  useEffect(() => window.api.events.onTasksChanged(receive), [receive])
 
   const replace = useCallback((next: Task[]): void => {
     const previous = latest.current
@@ -69,10 +85,18 @@ export function useTasks(showToast: ShowToast): TasksController {
     if (added.length > 0) setFreshIds((current) => new Set([...current, ...added]))
     latest.current = next
     setTasks(next)
-    void callApi(() => window.api.tasks.save(next)).then((result) => {
-      setSaveError(result.ok ? null : result.error.message)
+    // 只发改动，由主进程合并到它的最新列表上。
+    const patch = diffTasks(previous, next)
+    if (isEmptyPatch(patch)) return
+    pendingSaves.current += 1
+    void callApi(() => window.api.tasks.apply(patch)).then((result) => {
+      pendingSaves.current -= 1
+      setSaveError(result.ok ? result.data.saveError : result.error.message)
+      if (result.ok) receive({ tasks: result.data.tasks, revision: result.data.revision })
+      // 在途保存都回来了就换成最新一份；被主进程拒绝的改动这时也就撤回了。
+      else showNewest()
     })
-  }, [])
+  }, [receive, showNewest])
 
   const replaceWithUndo = useCallback(
     (next: Task[], message: string, undoChange: (current: Task[]) => Task[]): void => {
