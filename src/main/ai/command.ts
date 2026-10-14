@@ -119,13 +119,17 @@ function readActions(reply: Record<string, unknown>, candidates: Task[]): Result
   return ok({ actions, unmatched })
 }
 
-// 语音输入时 AI 听写出的原话；去掉看不见的格式字符（方向控制符会把引语镜像、零宽字符会藏字），
-// 其它控制字符当空格，压成一行、截断，空的当没听清。
+// 方向控制符会把引语整段镜像，零宽空格、软连字符之类会藏字：去掉。
+// 零宽连接符（U+200D）和标签字符（U+E0020–E007F）留着，组合 emoji（一家人、英格兰旗）要用。
+const HIDDEN_CHARS = /[­؜᠎​‎‏‪-‮⁠-⁤⁦-⁩﻿]/g
+
+// 语音输入时 AI 听写出的原话；去掉上面那些字符，其它控制字符当空格，压成一行、截断。
+// 空的、或只剩看不见的字符（比如单独的零宽连接符），当没听清。
 function readHeard(reply: Record<string, unknown>): string | null {
   if (typeof reply.heard !== 'string') return null
-  const visible = reply.heard.replace(/\p{Cf}/gu, '').replace(/\p{Cc}/gu, ' ')
+  const visible = reply.heard.replace(HIDDEN_CHARS, '').replace(/\p{Cc}/gu, ' ')
   const heard = truncateText(oneLine(visible), HEARD_MAX)
-  return heard === '' ? null : heard
+  return heard.replace(/\p{Cf}/gu, '').trim() === '' ? null : heard
 }
 
 export async function runCommand(
