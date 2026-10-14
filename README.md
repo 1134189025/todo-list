@@ -25,6 +25,10 @@ npm run dist
 `dist\win-unpacked\` 是未安装的解包目录。第一次打包会下载 electron-builder 需要的工具，需要能访问 GitHub。
 安装包没有代码签名，第一次运行时 Windows 可能提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」。
 
+**自动打包**：推送到 `main` 后，GitHub Actions（`.github/workflows/installer.yml`）在 Windows 上跑类型检查并打包，
+安装包发布到仓库 Releases 里的 `v<版本>`（同一版本再次推送会覆盖安装包），也能在那次 Actions 运行的构建产物里下载。
+要发新版本，先改 `package.json` 的 `version`。
+
 ## 第一次使用：配置 AI
 
 程序使用 OpenAI 兼容的接口。打开标题栏右侧的「设置」→「AI 服务」：

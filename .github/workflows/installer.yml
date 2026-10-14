@@ -1,0 +1,58 @@
+# 推送到 main 后在 Windows 上打 NSIS 安装包：上传为构建产物，并发布到 Release v<package.json 版本>。
+# 同一版本再次推送时覆盖 Release 里的安装包；要发新版本先改 package.json 的 version。
+name: 打包 Windows 安装包
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 安装依赖
+        run: npm ci
+
+      - name: 回归关卡（类型检查）
+        run: npm run typecheck
+
+      - name: 打包
+        run: npm run dist
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: qingxin-todo-setup
+          path: dist/*.exe
+          if-no-files-found: error
+
+      - name: 发布到 Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v$VERSION"
+          FILE="dist/qingxin-todo-setup-$VERSION.exe"
+          NOTES="由 main 分支 ${GITHUB_SHA::7} 自动打包。安装包没有代码签名，第一次运行时 Windows 可能提示「Windows 已保护你的电脑」，点「更多信息」→「仍要运行」。"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes "$NOTES"
+          else
+            gh release create "$TAG" --title "清新待办 $VERSION" --notes "$NOTES" --target "$GITHUB_SHA"
+          fi
+          gh release upload "$TAG" "$FILE" --clobber
