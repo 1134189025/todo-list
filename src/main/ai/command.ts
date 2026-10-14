@@ -122,10 +122,11 @@ function readActions(reply: Record<string, unknown>, candidates: Task[]): Result
 // 看不见的字符一律去掉：格式字符（\p{Cf}，方向控制符会把引语整段镜像，零宽空格、标签字符会藏字）
 // 和变体选择符（U+FE00–FE0F、U+E0100–E01EF，一串跟在一个字后面能藏数据）。
 // 只留组合 emoji 要用的：真有的三面地区旗（英格兰、苏格兰、威尔士）的整段标签、两个 emoji 之间的零宽连接符，
-// 以及紧跟在能当 emoji 的字（\p{Emoji}，含 keycap 的 0–9 # *）后面的一个 FE0E / FE0F（表情和文字两种样子）。
-// 跟在汉字、空格后面或连着好几个的都去掉：逐字夹一个也能藏数据。剩下的每一位都要一个看得见的 emoji 来带。
+// 紧跟在图形 emoji（\p{Extended_Pictographic}，含 ©、™、☀ 这类）后面的一个 FE0E / FE0F（表情和文字两种样子），
+// 以及 keycap（0–9 # * 后面 FE0F 再接 U+20E3）里的 FE0F。
+// 跟在汉字、普通数字、空格后面或连着好几个的都去掉：逐字夹一个也能藏数据。剩下的每一位都要一个看得见的 emoji 来带。
 const HIDDEN_CHARS =
-  /(\u{1F3F4}\u{E0067}\u{E0062}(?:\u{E0065}\u{E006E}\u{E0067}|\u{E0073}\u{E0063}\u{E0074}|\u{E0077}\u{E006C}\u{E0073})\u{E007F})|((?<=[\p{Extended_Pictographic}\u{FE0F}\u{1F3FB}-\u{1F3FF}])‍(?=\p{Extended_Pictographic}))|((?<=\p{Emoji})[︎️])|[\p{Cf}︀-️\u{E0100}-\u{E01EF}]/gu
+  /(\u{1F3F4}\u{E0067}\u{E0062}(?:\u{E0065}\u{E006E}\u{E0067}|\u{E0073}\u{E0063}\u{E0074}|\u{E0077}\u{E006C}\u{E0073})\u{E007F})|((?<=[\p{Extended_Pictographic}\u{FE0F}\u{1F3FB}-\u{1F3FF}])‍(?=\p{Extended_Pictographic}))|((?<=\p{Extended_Pictographic})[︎️]|(?<=[0-9#*])️(?=⃣))|[\p{Cf}︀-️\u{E0100}-\u{E01EF}]/gu
 // 看起来是空白、却不算空白字符的填充字符：只有它们时也当没听清。
 const BLANK_FILLERS = /[ᅟᅠㅤﾠ⠀]/g
 const VISIBLE_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/u
