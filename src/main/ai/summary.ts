@@ -9,6 +9,7 @@ import type { TasksStore } from '../store/tasksStore'
 import { completeChat, type SummaryKind } from './client'
 import { extractJsonObject, truncateText } from './parse'
 import { buildSummaryMessages } from './prompts'
+import { oneLine, readNumber, shortDate } from './taskText'
 
 const HEADLINE_MAX = 40
 const OVERVIEW_MAX = 200
@@ -24,15 +25,6 @@ type PromptData = { text: string; count: number; openToday: Task[] }
 
 function readText(value: unknown, max: number): string {
   return typeof value === 'string' ? truncateText(value.trim(), max) : ''
-}
-
-// 标题里的换行、制表符压成一个空格，一条待办只占一行。
-function oneLine(text: string): string {
-  return text.replace(/\s+/g, ' ').trim()
-}
-
-function shortDate(dateKey: string): string {
-  return dateKey.slice(5)
 }
 
 function openTodayLine(task: Task, index: number, today: string): string {
@@ -81,8 +73,8 @@ function buildOrder(openToday: Task[], raw: unknown): SummaryResult['order'] {
   const entries: unknown[] = Array.isArray(raw) ? raw : []
   for (const entry of entries) {
     if (!isRecord(entry)) continue
-    const number = typeof entry.id === 'number' ? entry.id : typeof entry.id === 'string' ? Number(entry.id.trim()) : NaN
-    if (!Number.isInteger(number) || number < 1 || number > MAX_OPEN_TASKS) continue
+    const number = readNumber(entry.id)
+    if (number === null || number > MAX_OPEN_TASKS) continue
     const task = openToday[number - 1]
     if (task === undefined || seen.has(task.id)) continue
     seen.add(task.id)

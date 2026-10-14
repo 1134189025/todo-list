@@ -91,3 +91,18 @@
 .confirm-card-spacer {
   flex: 1;
 }
+
+.confirm-card-note {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-row);
+  background: var(--color-ai-row-bg);
+  color: var(--color-ai-deep);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.confirm-card-note.is-warn {
+  background: var(--color-peach);
+  color: var(--color-peach-text);
+}

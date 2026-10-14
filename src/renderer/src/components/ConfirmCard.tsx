@@ -1,30 +1,40 @@
 import { useState } from 'react'
-import { type DraftItem, pickableItems } from '../lib/aiDraft'
-import type { AiFlow } from '../state/useAiFlow'
+import { type AiFlow, type AiStage, confirmCount } from '../state/useAiFlow'
+import { ConfirmDeleteRow } from './ConfirmDeleteRow'
 import { ConfirmRow } from './ConfirmRow'
 import { SparkIcon } from './icons'
 import './ConfirmCard.css'
 
 type ConfirmCardProps = {
   flow: AiFlow
-  items: DraftItem[]
-  script: string
+  stage: Extract<AiStage, { kind: 'confirm' }>
   today: string
 }
 
-export function ConfirmCard({ flow, items, script, today }: ConfirmCardProps) {
+function headline(added: number, deleted: number): string {
+  if (deleted === 0) return `整理出 ${added} 件待办`
+  if (added === 0) return `要删除 ${deleted} 件待办`
+  return `新建 ${added} 件、删除 ${deleted} 件`
+}
+
+/** AI 指令里要确认的部分：新建（可改标题和时间）和删除（勾选才删）；直接执行过的和没对上的在上面说明。 */
+export function ConfirmCard({ flow, stage, today }: ConfirmCardProps) {
   const [showRaw, setShowRaw] = useState(false)
-  const pickCount = pickableItems(items).length
+  const { items, deletes, applied, unmatched } = stage
+  const count = confirmCount(stage)
+  const hasDeletes = deletes.length > 0
 
   return (
-    <section className="confirm-card" aria-label="确认 AI 整理的待办">
+    <section className="confirm-card" aria-label="确认 AI 识别的操作">
       <div className="confirm-card-head">
         <span className="confirm-card-icon">
           <SparkIcon size={18} />
         </span>
         <div className="confirm-card-text">
-          <span className="confirm-card-title">整理出 {items.length} 件待办</span>
-          <span className="confirm-card-sub">勾选要添加的，标题和时间都能改</span>
+          <span className="confirm-card-title">{headline(items.length, deletes.length)}</span>
+          <span className="confirm-card-sub">
+            {hasDeletes ? '删除要你确认：勾选后点执行，执行后也能撤销' : '勾选要添加的，标题和时间都能改'}
+          </span>
         </div>
         <button
           type="button"
@@ -35,7 +45,13 @@ export function ConfirmCard({ flow, items, script, today }: ConfirmCardProps) {
           {showRaw ? '收起原话' : '查看原话'}
         </button>
       </div>
-      {showRaw && <p className="confirm-card-raw">“{script}”</p>}
+      {showRaw && <p className="confirm-card-raw">“{stage.script}”</p>}
+      {applied !== null && (
+        <p className="confirm-card-note" role="status">
+          {applied.message}
+        </p>
+      )}
+      {unmatched.length > 0 && <p className="confirm-card-note is-warn">没找到：{unmatched.join('、')}</p>}
       <ul className="confirm-card-list">
         {items.map((item) => (
           <ConfirmRow
@@ -46,6 +62,9 @@ export function ConfirmCard({ flow, items, script, today }: ConfirmCardProps) {
             onRemove={() => flow.removeItem(item.key)}
           />
         ))}
+        {deletes.map((item) => (
+          <ConfirmDeleteRow key={item.key} item={item} onToggle={(include) => flow.toggleDelete(item.key, include)} />
+        ))}
       </ul>
       <div className="confirm-card-actions">
         <button type="button" className="ai-card-button is-ghost" onClick={flow.reenter}>
@@ -55,8 +74,8 @@ export function ConfirmCard({ flow, items, script, today }: ConfirmCardProps) {
         <button type="button" className="ai-card-button is-ghost" onClick={flow.dismiss}>
           取消
         </button>
-        <button type="button" className="ai-card-button" disabled={pickCount === 0} onClick={flow.confirmItems}>
-          添加 {pickCount} 件
+        <button type="button" className="ai-card-button" disabled={count === 0} onClick={flow.confirmItems}>
+          {hasDeletes ? `执行 ${count} 项` : `添加 ${count} 件`}
         </button>
       </div>
     </section>

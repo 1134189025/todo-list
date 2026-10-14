@@ -11,7 +11,7 @@ type AiCardProps = {
   onOpenSettings: () => void
 }
 
-/** 输入区的位置：AI 整理期间依次显示思考中、确认、或出错卡片。 */
+/** 输入区的位置：AI 指令期间依次显示思考中、确认、没对上、或出错卡片。 */
 export function AiCard({ flow, today, onOpenSettings }: AiCardProps) {
   const { stage } = flow
   switch (stage.kind) {
@@ -20,7 +20,18 @@ export function AiCard({ flow, today, onOpenSettings }: AiCardProps) {
     case 'thinking':
       return <ThinkingCard script={stage.script} onCancel={flow.cancelThinking} />
     case 'confirm':
-      return <ConfirmCard flow={flow} items={stage.items} script={stage.script} today={today} />
+      return <ConfirmCard flow={flow} stage={stage} today={today} />
+    case 'unmatched':
+      return (
+        <NoticeCard
+          tone="ai"
+          title="没对上现有的待办"
+          body={`没找到：${stage.unmatched.join('、')}${stage.applied === null ? '' : `。${stage.applied.message}`}`}
+          quote={stage.script}
+          primary={{ label: '知道了', onClick: flow.dismiss }}
+          secondary={{ label: '重新输入', onClick: flow.reenter }}
+        />
+      )
     case 'empty':
       return (
         <NoticeCard

@@ -62,7 +62,7 @@ export function App() {
     tasks.replaceWithUndo([...created, ...current], message, (now) => withoutIds(now, ids))
   }
 
-  const aiFlow = useAiFlow({ addTasks, restoreDraft: setDraft })
+  const aiFlow = useAiFlow({ tasks, restoreDraft: setDraft, today })
   const voice = useVoice(accelerator, settingsOpen || aiFlow.stage.kind !== 'idle')
   const summary = useSummary(list, today)
 

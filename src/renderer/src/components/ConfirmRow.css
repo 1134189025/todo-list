@@ -93,3 +93,24 @@
 .confirm-row-remove:hover {
   background: var(--color-done-bg);
 }
+
+.confirm-row-badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-peach);
+  color: var(--color-danger);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.confirm-row-title.is-readonly {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.confirm-row.is-delete:not(.is-off) {
+  box-shadow: 0 0 0 1px var(--color-peach-accent);
+}

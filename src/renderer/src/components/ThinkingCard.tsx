@@ -14,7 +14,7 @@ export function ThinkingCard({ script, onCancel }: ThinkingCardProps) {
           <SparkIcon size={18} />
         </span>
         <span className="thinking-card-title" role="status">
-          AI 正在把你说的话整理成待办…
+          AI 正在理解你说的话…
         </span>
       </div>
       <p className="thinking-card-quote">“{script}”</p>

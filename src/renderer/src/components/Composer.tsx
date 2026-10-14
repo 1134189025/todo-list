@@ -7,7 +7,7 @@ import './Composer.css'
 
 export type SubmitMode = 'ai' | 'direct'
 
-/** 输入区的模式：AI 整理（Enter 交给 AI），或手动添加（Enter 直接添加，可以选日期和时间）。 */
+/** 输入区的模式：AI 指令（Enter 交给 AI：新建、完成、改时间、改标题、删除），或手动添加（Enter 直接添加，可以选日期和时间）。 */
 export type ComposerMode = 'ai' | 'manual'
 
 /** 手动添加时选的日期和时间；date 为 null 表示今天、没定日期。 */
@@ -16,12 +16,12 @@ export type ComposerWhen = { date: string | null; time: string | null }
 const MAX_LENGTH = 500
 
 const MODES: { key: ComposerMode; label: string }[] = [
-  { key: 'ai', label: 'AI 整理' },
+  { key: 'ai', label: 'AI 指令' },
   { key: 'manual', label: '手动添加' }
 ]
 
 const HINTS: Record<ComposerMode, string> = {
-  ai: 'Enter 让 AI 整理 · Ctrl+Enter 直接添加',
+  ai: 'Enter 交给 AI：新建、完成、改时间、删除都行 · Ctrl+Enter 直接添加',
   manual: 'Enter 添加 · 点时间可以改日期和提醒'
 }
 
@@ -88,7 +88,7 @@ export function Composer(props: ComposerProps) {
           type="text"
           autoComplete="off"
           maxLength={MAX_LENGTH}
-          placeholder={manual ? '输入待办，Enter 添加…' : '说一句话，或直接输入待办…'}
+          placeholder={manual ? '输入待办，Enter 添加…' : '说一句话：加待办、标记完成、改时间、删除…'}
           value={value}
           disabled={disabled}
           onChange={(event) => props.onChange(event.target.value)}
@@ -110,8 +110,8 @@ export function Composer(props: ComposerProps) {
         <button
           type="button"
           className="composer-send"
-          aria-label={manual ? '添加' : '让 AI 整理'}
-          title={manual ? '添加' : '让 AI 整理'}
+          aria-label={manual ? '添加' : '交给 AI'}
+          title={manual ? '添加' : '交给 AI'}
           disabled={!canSend}
           onClick={() => props.onSubmit(value, manual ? 'direct' : 'ai')}
         >

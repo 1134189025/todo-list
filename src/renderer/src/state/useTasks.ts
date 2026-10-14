@@ -21,6 +21,8 @@ export type TasksController = {
    * 不回滚整份数据，避免把期间的勾选、别的修改一起抹掉。
    */
   replaceWithUndo: (next: Task[], message: string, undoChange: (current: Task[]) => Task[]) => void
+  /** 只弹出带「撤销」的提示，不改列表（改动已经做过了）。 */
+  offerUndo: (message: string, undoChange: (current: Task[]) => Task[]) => void
   dismissCorruptNotice: () => void
 }
 
@@ -98,16 +100,23 @@ export function useTasks(showToast: ShowToast): TasksController {
     })
   }, [receive, showNewest])
 
-  const replaceWithUndo = useCallback(
-    (next: Task[], message: string, undoChange: (current: Task[]) => Task[]): void => {
-      if (latest.current === null) return
-      replace(next)
+  const offerUndo = useCallback(
+    (message: string, undoChange: (current: Task[]) => Task[]): void => {
       showToast(message, () => {
         const current = latest.current
         if (current !== null) replace(undoChange(current))
       })
     },
     [replace, showToast]
+  )
+
+  const replaceWithUndo = useCallback(
+    (next: Task[], message: string, undoChange: (current: Task[]) => Task[]): void => {
+      if (latest.current === null) return
+      replace(next)
+      offerUndo(message, undoChange)
+    },
+    [replace, offerUndo]
   )
 
   const snapshot = useCallback(() => latest.current, [])
@@ -127,6 +136,7 @@ export function useTasks(showToast: ShowToast): TasksController {
     snapshot,
     replace,
     replaceWithUndo,
+    offerUndo,
     dismissCorruptNotice
   }
 }

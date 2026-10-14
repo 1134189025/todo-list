@@ -4,7 +4,7 @@ import { fail, ok } from '@shared/result'
 import type { TasksSnapshot } from '@shared/taskPatch'
 import {
   validateApiKey,
-  validateParseRequest,
+  validateCommandRequest,
   validateRequestId,
   validateSettingsPatch,
   validateSummarizeRequest,
@@ -12,7 +12,7 @@ import {
   validateTestDraft
 } from '@shared/validate'
 import { cancelAiRequest, testAiConnection } from './ai/client'
-import { parseTasksText } from './ai/parse'
+import { runCommand } from './ai/command'
 import { summarizeTasks } from './ai/summary'
 import { isSandbox } from './sandbox'
 import type { SettingsService } from './settingsService'
@@ -83,10 +83,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   })
   handle(IPC.settingsClearApiKey, () => settingsService.clearApiKey())
 
-  handle(IPC.aiParse, async (raw) => {
-    const checked = validateParseRequest(raw)
+  handle(IPC.aiCommand, async (raw) => {
+    const checked = validateCommandRequest(raw)
     if (!checked.ok) return invalidInput(checked.message)
-    return parseTasksText(settings, checked.value)
+    return runCommand(tasks, settings, checked.value)
   })
   handle(IPC.aiSummarize, async (raw) => {
     const checked = validateSummarizeRequest(raw)

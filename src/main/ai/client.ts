@@ -8,7 +8,7 @@ import type { SettingsStore } from '../store/settingsStore'
 
 export type ChatMessage = { role: 'system' | 'user'; content: string }
 export type SummaryKind = 'summarize' | 'auto-summary'
-export type RequestKind = 'parse' | SummaryKind
+export type RequestKind = 'command' | SummaryKind
 export type Tracking = { kind: RequestKind; requestId: string }
 export type TestDraft = { baseUrl: string; model: string; apiKey?: string }
 

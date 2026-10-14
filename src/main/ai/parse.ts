@@ -3,11 +3,7 @@ import { isDateKey, isTimeKey } from '@shared/dates'
 import { fail, ok } from '@shared/result'
 import { truncateTitle } from '@shared/text'
 import { isRecord } from '@shared/validate'
-import type { SettingsStore } from '../store/settingsStore'
-import { completeChat } from './client'
-import { buildParseMessages } from './prompts'
 
-const MAX_ITEMS = 20
 const MAX_OBJECT_CANDIDATES = 20
 const BAD_REPLY_MESSAGE = 'AI 返回的内容看不懂'
 
@@ -62,39 +58,12 @@ export function extractJsonObject(content: string): Result<Record<string, unknow
   return fail('BAD_RESPONSE', BAD_REPLY_MESSAGE)
 }
 
-function sanitizeItem(value: unknown): ParsedItem | null {
+/** AI 给的一条新建待办：标题去空白并截断，日期不是真实日期就置 null，没有日期时不留时间。 */
+export function sanitizeItem(value: unknown): ParsedItem | null {
   if (!isRecord(value) || typeof value.title !== 'string') return null
   const title = value.title.trim()
   if (title === '') return null
   const date = typeof value.date === 'string' && isDateKey(value.date) ? value.date : null
   const rawTime = typeof value.time === 'string' && isTimeKey(value.time) ? value.time : null
   return { title: truncateTitle(title), date, time: date === null ? null : rawTime }
-}
-
-function sanitizeParsedItems(reply: Record<string, unknown>): Result<ParsedItem[]> {
-  const raw: unknown = reply.items
-  if (!Array.isArray(raw)) return fail('BAD_RESPONSE', BAD_REPLY_MESSAGE)
-  const entries: unknown[] = raw
-  const items: ParsedItem[] = []
-  for (const entry of entries) {
-    if (items.length === MAX_ITEMS) break
-    const item = sanitizeItem(entry)
-    if (item !== null) items.push(item)
-  }
-  return ok(items)
-}
-
-export async function parseTasksText(
-  settings: SettingsStore,
-  request: { requestId: string; text: string }
-): Promise<Result<ParsedItem[]>> {
-  const reply = await completeChat(
-    settings,
-    { kind: 'parse', requestId: request.requestId },
-    buildParseMessages(request.text, new Date())
-  )
-  if (!reply.ok) return reply
-  const json = extractJsonObject(reply.data)
-  if (!json.ok) return json
-  return sanitizeParsedItems(json.data)
 }

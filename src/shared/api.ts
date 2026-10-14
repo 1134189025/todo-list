@@ -53,6 +53,21 @@ export type SettingsPatch = {
 
 export type ParsedItem = { title: string; date: string | null; time: string | null }
 
+/**
+ * AI 指令识别出的一项操作。id 是真实任务 id（主进程已把编号映射回来）。
+ * reschedule 里 date / time 不出现 = 不改；null = 清掉（date 为 null 时 time 也清掉）。
+ */
+export type AiAction =
+  | { op: 'add'; item: ParsedItem }
+  | { op: 'complete'; id: string }
+  | { op: 'reopen'; id: string }
+  | { op: 'reschedule'; id: string; date?: string | null; time?: string | null }
+  | { op: 'rename'; id: string; title: string }
+  | { op: 'delete'; id: string }
+
+/** unmatched：用户提到了、但在现有待办里对不上的说法。 */
+export type AiCommandResult = { actions: AiAction[]; unmatched: string[] }
+
 export type SummaryResult = {
   headline: string
   overview: string
@@ -76,7 +91,8 @@ export interface QingxinApi {
     clearApiKey(): Promise<Result<PublicSettings>>
   }
   ai: {
-    parse(req: { requestId: string; text: string }): Promise<Result<ParsedItem[]>>
+    // 一句话里的新建、完成、取消完成、改时间、改标题、删除，一次识别出来
+    command(req: { requestId: string; text: string }): Promise<Result<AiCommandResult>>
     summarize(req: { requestId: string }): Promise<Result<SummaryResult>>
     // draft 不传 = 用已保存的配置；draft.apiKey 不传 = 用已保存的 Key，
     // 但只在 draft 地址和已保存地址是同一个站点（协议 + 主机 + 端口）时才用，免得把 Key 发给另一家服务
@@ -102,7 +118,7 @@ export const IPC = {
   settingsSave: 'settings:save',
   settingsSetApiKey: 'settings:setApiKey',
   settingsClearApiKey: 'settings:clearApiKey',
-  aiParse: 'ai:parse',
+  aiCommand: 'ai:command',
   aiSummarize: 'ai:summarize',
   aiTestConnection: 'ai:testConnection',
   aiCancel: 'ai:cancel',

@@ -22,7 +22,7 @@ const api: QingxinApi = {
     clearApiKey: () => ipcRenderer.invoke(IPC.settingsClearApiKey)
   },
   ai: {
-    parse: (req) => ipcRenderer.invoke(IPC.aiParse, req),
+    command: (req) => ipcRenderer.invoke(IPC.aiCommand, req),
     summarize: (req) => ipcRenderer.invoke(IPC.aiSummarize, req),
     testConnection: (draft) => ipcRenderer.invoke(IPC.aiTestConnection, draft),
     cancel: (requestId) => ipcRenderer.invoke(IPC.aiCancel, requestId)

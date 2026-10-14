@@ -1,5 +1,5 @@
 import type { FloatWindowSettings, SettingsPatch } from './api'
-import type { TaskPatch } from './taskPatch'
+import { TASK_FIELDS, type TaskFields, type TaskPatch } from './taskPatch'
 import { isDateKey, isIsoTimestamp, isTimeKey } from './dates'
 import { TITLE_MAX } from './text'
 import type { Task, TaskSource } from './types'
@@ -92,6 +92,30 @@ export function validateTask(value: unknown): Validation<Task> {
 
 const PATCH_MAX = 5000
 
+// 改动里的单个字段：类型和格式先在这里查，合并后的整条任务主进程再用 validateTask 查一遍。
+const FIELD_CHECKS: Record<(typeof TASK_FIELDS)[number], (value: unknown) => boolean> = {
+  title: (value) => boundedText(value, 1, TITLE_MAX) !== null,
+  done: (value) => typeof value === 'boolean',
+  dueDate: (value) => nullableMatching(value, isDateKey) !== undefined,
+  dueTime: (value) => nullableMatching(value, isTimeKey) !== undefined,
+  createdAt: (value) => matching(value, isIsoTimestamp) !== undefined,
+  completedAt: (value) => nullableMatching(value, isIsoTimestamp) !== undefined,
+  source: (value) => validateTaskSource(value) !== null
+}
+
+function validateTaskUpdate(value: unknown): Validation<{ id: string; fields: TaskFields }> {
+  if (!isRecord(value) || !isRecord(value.fields)) return invalid('任务改动格式不正确')
+  const id = boundedText(value.id, 1, ID_MAX)
+  if (id === null) return invalid('任务 id 不合法')
+  const fields: TaskFields = {}
+  for (const [key, field] of Object.entries(value.fields)) {
+    const known = TASK_FIELDS.find((name) => name === key)
+    if (known === undefined || !FIELD_CHECKS[known](field)) return invalid('任务改动格式不正确')
+    Object.assign(fields, { [known]: known === 'title' ? boundedText(field, 1, TITLE_MAX) : field })
+  }
+  return valid({ id, fields })
+}
+
 export function validateTaskPatch(value: unknown): Validation<TaskPatch> {
   if (!isRecord(value)) return invalid('任务改动格式不正确')
   const { added, updated, removedIds } = value
@@ -109,9 +133,9 @@ export function validateTaskPatch(value: unknown): Validation<TaskPatch> {
     patch.added.push({ task: task.value, index: entry.index })
   }
   for (const entry of updated as unknown[]) {
-    const task = validateTask(entry)
-    if (!task.ok) return invalid(task.message)
-    patch.updated.push(task.value)
+    const update = validateTaskUpdate(entry)
+    if (!update.ok) return invalid(update.message)
+    patch.updated.push(update.value)
   }
   for (const entry of removedIds as unknown[]) {
     const id = boundedText(entry, 1, ID_MAX)
@@ -193,7 +217,7 @@ export function validateRequestId(value: unknown): Validation<string> {
   return valid(requestId)
 }
 
-export function validateParseRequest(value: unknown): Validation<{ requestId: string; text: string }> {
+export function validateCommandRequest(value: unknown): Validation<{ requestId: string; text: string }> {
   if (!isRecord(value)) return invalid('请求格式不正确')
   const requestId = validateRequestId(value.requestId)
   if (!requestId.ok) return invalid(requestId.message)

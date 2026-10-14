@@ -154,7 +154,7 @@ export function createTasksStore(filePath: string): TasksStore {
     },
     async apply(patch: TaskPatch): Promise<Result<TasksSnapshot & { saveError: string | null }>> {
       if (!writable) return fail('IO', '任务数据还没有读取成功，暂不保存')
-      const saved = await save(applyTaskPatch(tasks, patch))
+      const saved = await save(applyTaskPatch(tasks, patch, (task) => validateTask(task).ok))
       // 写盘期间可能又合并了别的窗口的改动：返回此刻内存里的列表，它比之前推给任何窗口的都新。
       return ok({ tasks: [...tasks], revision, saveError: saved.ok ? null : saved.error.message })
     },
