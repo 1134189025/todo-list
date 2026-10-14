@@ -119,17 +119,24 @@ function readActions(reply: Record<string, unknown>, candidates: Task[]): Result
   return ok({ actions, unmatched })
 }
 
-// 方向控制符会把引语整段镜像，零宽空格、软连字符之类会藏字：去掉。
-// 零宽连接符（U+200D）和标签字符（U+E0020–E007F）留着，组合 emoji（一家人、英格兰旗）要用。
-const HIDDEN_CHARS = /[­؜᠎​‎‏‪-‮⁠-⁤⁦-⁩﻿]/g
+// 看不见的字符一律去掉：格式字符（\p{Cf}，方向控制符会把引语整段镜像，零宽空格、标签字符会藏字）
+// 和补充变体选择符（U+E0100–E01EF，能跟在一个字后面藏一串数据）。
+// 只留组合 emoji 要用的两种：零宽连接符（U+200D，一家人这类）和 🏴 后面的地区标签（英格兰旗这类，2–6 个小写字母或数字）。
+const HIDDEN_CHARS = /(\u{1F3F4}[\u{E0030}-\u{E0039}\u{E0061}-\u{E007A}]{2,6}\u{E007F})|[\p{Cf}\u{E0100}-\u{E01EF}]/gu
+// 看起来是空白、却不算空白字符的填充字符：只有它们时也当没听清。
+const BLANK_FILLERS = /[ᅟᅠㅤﾠ⠀]/g
+const VISIBLE_CHAR = /[\p{L}\p{N}\p{P}\p{S}]/u
 
-// 语音输入时 AI 听写出的原话；去掉上面那些字符，其它控制字符当空格，压成一行、截断。
-// 空的、或只剩看不见的字符（比如单独的零宽连接符），当没听清。
+function stripHidden(text: string): string {
+  return text.replace(HIDDEN_CHARS, (char, flag?: string) => (flag !== undefined || char === '‍' ? char : ''))
+}
+
+// 语音输入时 AI 听写出的原话；去掉看不见的字符，其它控制字符当空格，压成一行、截断。
+// 没有一个看得见的字（字母、数字、标点、符号）就当没听清。
 function readHeard(reply: Record<string, unknown>): string | null {
   if (typeof reply.heard !== 'string') return null
-  const visible = reply.heard.replace(HIDDEN_CHARS, '').replace(/\p{Cc}/gu, ' ')
-  const heard = truncateText(oneLine(visible), HEARD_MAX)
-  return heard.replace(/\p{Cf}/gu, '').trim() === '' ? null : heard
+  const heard = truncateText(oneLine(stripHidden(reply.heard).replace(/\p{Cc}/gu, ' ')), HEARD_MAX)
+  return VISIBLE_CHAR.test(heard.replace(BLANK_FILLERS, '')) ? heard : null
 }
 
 export async function runCommand(
