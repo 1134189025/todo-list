@@ -92,13 +92,14 @@ export async function summarizeTasks(
   tasks: TasksStore,
   settings: SettingsStore,
   requestId: string,
-  kind: SummaryKind
+  kind: SummaryKind,
+  owner: number | null
 ): Promise<Result<SummaryResult>> {
   const now = new Date()
   const snapshot = tasks.snapshot()
   const prompt = buildPromptData(snapshot, now)
 
-  const reply = await completeChat(settings, { kind, requestId }, buildSummaryMessages(prompt.text, now))
+  const reply = await completeChat(settings, { kind, requestId, owner }, buildSummaryMessages(prompt.text, now))
   if (!reply.ok) return reply
   const json = extractJsonObject(reply.data)
   if (!json.ok) return json

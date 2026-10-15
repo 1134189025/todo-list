@@ -203,7 +203,8 @@ function readVisibleText(value: unknown, max: number): string | null {
 export async function runCommand(
   tasks: TasksStore,
   settings: SettingsStore,
-  request: { requestId: string; input: CommandInput }
+  request: { requestId: string; input: CommandInput },
+  owner: number | null
 ): Promise<Result<AiCommandResult>> {
   const now = new Date()
   const today = toDateKey(now)
@@ -212,7 +213,7 @@ export async function runCommand(
   const names = categoryNames(categories)
   const reply = await completeChat(
     settings,
-    { kind: 'command', requestId: request.requestId },
+    { kind: 'command', requestId: request.requestId, owner },
     buildCommandMessages(candidatesText(candidates, names, today), categoriesText(categories), request.input, now)
   )
   if (!reply.ok) return reply
