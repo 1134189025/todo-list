@@ -312,7 +312,7 @@ export function VoicePillApp() {
       ) : phase.kind === 'ask' ? (
         <PillRow>
           <span className="pill-text" role="status">
-            {deleteQuestion(phase.deletes)}
+            {deleteQuestion(currentTitles(phase.deletes, tasks.tasks))}
           </span>
           <button type="button" className="pill-button is-quiet" onClick={keepDeletes}>
             保留
@@ -340,6 +340,19 @@ export function VoicePillApp() {
 /** 一行文字的胶囊：结果、提示、删除确认都长这样。 */
 function PillRow({ children }: { children: ReactNode }) {
   return <div className="pill pill-row">{children}</div>
+}
+
+/**
+ * 删除确认显示的是现在的标题：问出去之后主窗口可能把这条改了名，确认时删的是同一条（按 id），
+ * 文字也要跟上；已经被别处删掉的不再列出（全都不在了就照旧显示，点删除时会提示「已经不在了」）。
+ */
+function currentTitles(targets: readonly PillDeleteTarget[], list: readonly Task[] | null): PillDeleteTarget[] {
+  if (list === null) return [...targets]
+  const live = targets.flatMap((target) => {
+    const task = list.find((candidate) => candidate.id === target.taskId)
+    return task === undefined ? [] : [{ taskId: target.taskId, title: task.title }]
+  })
+  return live.length === 0 ? [...targets] : live
 }
 
 /** 录音中 / 思考中：黑色胶囊、✕、波形小点、✓（思考中换成转圈）。两种状态外形和大小完全一样。 */

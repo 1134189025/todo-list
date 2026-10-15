@@ -18,6 +18,9 @@
 .shell-main {
   flex: 1;
   min-width: 0;
+  /* 很窄的窗口里三栏改成上下排列（见文末）：不写这一行，列表那一列会被撑成内容的高度，
+     待办一多就把下面的 AI 助理和输入框整个挤出窗口。 */
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
