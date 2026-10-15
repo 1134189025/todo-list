@@ -24,7 +24,7 @@ import './VoicePill.css'
 // 语音胶囊：屏幕底部的小窗口。录音在胶囊里完成，结果一行文字 + 撤销，约 5 秒后自己隐藏。
 // 窗口的显示、位置和隐藏由主进程负责（它也不抢焦点），这里只负责内容和申请窗口大小。
 
-/** 结果和提示停留多久后自己隐藏。 */
+/** 结果和提示停留多久后自己隐藏（鼠标停在胶囊上时暂停，移开后重新计时）。 */
 const RESULT_MS = 5000
 /** 删除确认没人理时，多久后按「保留」收起（胶囊压在所有窗口上面，不能一直挂着）。 */
 const ASK_MS = 15000
@@ -246,7 +246,15 @@ export function VoicePillApp() {
   const notice = voice.state.kind === 'notice' ? voice.state.notice : null
   const hideable = notice !== null || ((phase.kind === 'done' || phase.kind === 'tip') && voice.state.kind === 'idle')
 
-  // 结果和提示约 5 秒后自己隐藏；鼠标停在胶囊上时暂停计时。
+  // 每显示一段新内容、或隐藏时（隐藏也会走 show，generation 跟着变），hover 按真实指针重算。
+  // 隐藏的窗口收不到 mouseleave，旧的 true 会留到下一次显示，之后的结果就不会自己消失了。
+  // 隐藏态没有内容，直接是 false。
+  useEffect(() => {
+    const node = rootRef.current
+    setHover(node !== null && node.firstElementChild !== null && node.matches(':hover'))
+  }, [generation])
+
+  // 结果和提示约 5 秒后自己隐藏；鼠标停在胶囊上时暂停计时，移开后重新计 5 秒。
   useEffect(() => {
     if (!hideable || hover) return
     const timer = window.setTimeout(hide, RESULT_MS)
