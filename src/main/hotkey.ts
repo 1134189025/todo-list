@@ -1,5 +1,5 @@
-import { globalShortcut, type BrowserWindow } from 'electron'
-import { IPC, type HotkeyStatus, type Result } from '@shared/api'
+import { globalShortcut } from 'electron'
+import { type HotkeyStatus, type Result } from '@shared/api'
 import { isMouseAccelerator } from '@shared/accelerator'
 import { fail, ok } from '@shared/result'
 import { createMouseHook } from './mouseHook'
@@ -17,18 +17,14 @@ export type HotkeyManager = {
   unregisterAll(): void
 }
 
-export function createHotkeyManager(getWindow: () => BrowserWindow | null): HotkeyManager {
+export function createHotkeyManager(options: { onVoiceHotkey: () => void }): HotkeyManager {
   let registered: string | null = null
   let state: HotkeyStatus = 'off'
   const mouseHook = createMouseHook()
 
+  // 按下语音键：不再弹出主窗口，改为让屏幕底部的语音胶囊开始 / 结束录音。
   function onPress(): void {
-    const win = getWindow()
-    if (win === null || win.isDestroyed()) return
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.focus()
-    win.webContents.send(IPC.voiceHotkey)
+    options.onVoiceHotkey()
   }
 
   function tryRegister(accelerator: string): boolean {

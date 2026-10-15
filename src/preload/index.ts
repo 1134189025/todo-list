@@ -33,9 +33,15 @@ const api: QingxinApi = {
     onTasksChanged: (cb) => subscribe<TasksSnapshot>(IPC.tasksChanged, cb),
     onSettingsChanged: (cb) => subscribe<PublicSettings>(IPC.settingsChanged, cb)
   },
+  voicePill: {
+    ready: () => ipcRenderer.invoke(IPC.voicePillReady),
+    resize: (size) => ipcRenderer.invoke(IPC.voicePillResize, size),
+    hide: () => ipcRenderer.invoke(IPC.voicePillHide)
+  },
   app: {
     isSandbox: ipcRenderer.sendSync(IPC.appIsSandbox) === true,
-    showMain: () => ipcRenderer.invoke(IPC.appShowMain)
+    showMain: () => ipcRenderer.invoke(IPC.appShowMain),
+    toggleVoicePill: () => ipcRenderer.invoke(IPC.appToggleVoicePill)
   }
 }
 

@@ -31,6 +31,11 @@ export type FloatWindowSettings = {
 /** 悬浮窗最低不透明度：再低就看不清字了。 */
 export const FLOAT_OPACITY_MIN = 0.3
 
+/** 胶囊窗口按内容向主进程申请的尺寸；主进程只接受这个范围里的整数，超出就忽略。 */
+export type PillSize = { width: number; height: number }
+
+export const PILL_SIZE_LIMITS = { minWidth: 120, maxWidth: 480, minHeight: 40, maxHeight: 240 } as const
+
 /**
  * AI 接口格式：openai = OpenAI 兼容（{地址}/chat/completions）；
  * gemini = Gemini 原生（{地址}/v1beta/models/{模型}:generateContent），能传语音，并请求低思考档。
@@ -131,13 +136,27 @@ export interface QingxinApi {
   }
   events: {
     onSummaryShow(cb: (s: SummaryResult) => void): () => void  // 返回取消订阅函数
-    onVoiceHotkey(cb: () => void): () => void                   // 全局快捷键被按下
+    /**
+     * 主进程让语音胶囊开始 / 结束录音（全局语音键、或悬浮窗的语音按钮）。
+     * 只有胶囊页面订阅它：主窗口不再接收全局语音键，输入框左边的麦克风仍然自己录自己的。
+     */
+    onVoiceHotkey(cb: () => void): () => void
     onTasksChanged(cb: (snapshot: TasksSnapshot) => void): () => void  // 别的窗口改了任务或分类
     onSettingsChanged(cb: (s: PublicSettings) => void): () => void  // 设置变了（托盘、悬浮窗、别的窗口）
+  }
+  /** 语音胶囊页面专用的通道：主进程负责窗口的显示、位置和隐藏。 */
+  voicePill: {
+    /** 页面加载完、事件订阅就绪；主进程收到之前的触发会排队，这时再补发。 */
+    ready(): Promise<Result<null>>
+    /** 按当前内容申请窗口大小：宽 120–480、高 40–240 的整数，主进程保持底边不动向上长。 */
+    resize(size: PillSize): Promise<Result<null>>
+    /** 隐藏胶囊（录音中被隐藏 = 放弃这次录音）。 */
+    hide(): Promise<Result<null>>
   }
   app: {
     isSandbox: boolean
     showMain(): Promise<Result<null>>   // 显示并聚焦主窗口（悬浮窗里用）
+    toggleVoicePill(): Promise<Result<null>>   // 触发语音胶囊（悬浮窗的语音按钮）
   }
 }
 
@@ -153,9 +172,14 @@ export const IPC = {
   aiTestConnection: 'ai:testConnection',
   aiCancel: 'ai:cancel',
   summaryShow: 'summary:show',
+  /** 主进程 → 胶囊页面：开始 / 结束录音（全局语音键、悬浮窗语音按钮）。 */
   voiceHotkey: 'voice:hotkey',
+  voicePillReady: 'voicePill:ready',
+  voicePillResize: 'voicePill:resize',
+  voicePillHide: 'voicePill:hide',
   tasksChanged: 'tasks:changed',
   settingsChanged: 'settings:changed',
   appIsSandbox: 'app:isSandbox',
-  appShowMain: 'app:showMain'
+  appShowMain: 'app:showMain',
+  appToggleVoicePill: 'app:toggleVoicePill'
 } as const

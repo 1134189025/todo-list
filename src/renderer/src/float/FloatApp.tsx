@@ -2,7 +2,7 @@ import { useState, type KeyboardEvent } from 'react'
 import { todayProgress } from '@shared/dates'
 import { truncateTitle } from '@shared/text'
 import type { Task } from '@shared/types'
-import { CloseIcon, LockIcon, OpenMainIcon, PinIcon } from '../components/icons'
+import { CloseIcon, LockIcon, MicIcon, OpenMainIcon, PinIcon } from '../components/icons'
 import { callApi } from '../lib/callApi'
 import { formatTaskWhen } from '../lib/labels'
 import { createTodayTask, toggleDone } from '../lib/taskOps'
@@ -33,6 +33,11 @@ export function FloatApp() {
   async function openMain(): Promise<void> {
     const result = await callApi(() => window.api.app.showMain())
     setActionError(result.ok ? null : result.error.message)
+  }
+
+  /** 语音按钮：和语音键一样，在屏幕底部弹出录音胶囊。 */
+  async function openVoicePill(): Promise<void> {
+    await callApi(() => window.api.app.toggleVoicePill())
   }
 
   function toggleTask(id: string): void {
@@ -131,6 +136,15 @@ export function FloatApp() {
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={handleKeyDown}
         />
+        <button
+          type="button"
+          className="float-mic"
+          aria-label="语音输入（在屏幕底部弹出录音胶囊）"
+          title="语音输入"
+          onClick={() => void openVoicePill()}
+        >
+          <MicIcon size={16} />
+        </button>
       </div>
     </div>
   )

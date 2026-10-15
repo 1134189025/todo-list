@@ -42,7 +42,10 @@ export function SettingsDialog({ settings, loadError, actions }: SettingsDialogP
         <OpenAtLoginRow checked={settings.openAtLogin} save={actions.save} />
         <HotkeySetting hotkey={settings.voiceHotkey} save={actions.save} />
       </div>
-      <p className="settings-footnote">语音输入要求 AI 服务的接口格式是 Gemini 原生：按快捷键或点输入框左边的麦克风开始说，再按一次结束</p>
+      <p className="settings-footnote">
+        语音输入要求 AI 服务的接口格式是 Gemini 原生：按快捷键会在屏幕底部弹出录音胶囊，再按一次结束；
+        输入框左边的麦克风仍然直接在主窗口里录音
+      </p>
     </div>
   )
 }
