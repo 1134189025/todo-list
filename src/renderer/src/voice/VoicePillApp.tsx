@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type CSSProperties, type Reac
 import { PILL_SIZE_LIMITS, type AiCommandResult, type PublicSettings, type VoiceClip } from '@shared/api'
 import type { Task } from '@shared/types'
 import { CheckIcon, CloseIcon } from '../components/icons'
-import type { TaskChange } from '../lib/aiActions'
+import type { CategoryNotes, TaskChange } from '../lib/aiActions'
 import { aiErrorKind, aiErrorTitle } from '../lib/aiErrors'
 import { isAiConfigured } from '../lib/aiForm'
 import { callApi } from '../lib/callApi'
@@ -40,7 +40,7 @@ const LEVEL_GATE = 0.04
  * 结果那一行文字用胶囊自己的执行说明，不用 AI 的 reply：
  * 提示词让 AI 对新建说「确认一下就加上」，而胶囊里新建是直接执行的，照搬会误导。
  */
-type DoneText = { created: readonly Task[]; changes: readonly TaskChange[] }
+type DoneText = { created: readonly Task[]; changes: readonly TaskChange[]; notes: CategoryNotes }
 
 /** 录音相关的状态在 useVoice 里，这里只放它的下一段和提示。 */
 type Phase =
@@ -105,7 +105,7 @@ export function VoicePillApp() {
   // 结果那一行：胶囊自己的执行说明（见 DoneText 的说明）。
   const donePhase = useCallback(
     (text: DoneText, undo: PillUndo | null, deleted: number): Phase => {
-      const line = pillSummary(text.created, text.changes, deleted, today)
+      const line = pillSummary(text.created, text.changes, deleted, today, text.notes)
       return line === ''
         ? { kind: 'tip', text: '这次没有要改的待办', toSettings: false }
         : { kind: 'done', text: line, undo }
@@ -116,11 +116,12 @@ export function VoicePillApp() {
   const receive = useCallback(
     (result: AiCommandResult): void => {
       const current = tasks.snapshot()
-      if (current === null) {
+      const categories = tasks.categoriesSnapshot()
+      if (current === null || categories === null) {
         show({ kind: 'tip', text: '还没读到待办，这次没有执行', toSettings: false })
         return
       }
-      const plan = planPill(result.actions, current, new Date().toISOString(), today)
+      const plan = planPill(result.actions, { tasks: current, categories }, new Date().toISOString(), today)
       if (plan.nothing) {
         // 没听懂：对不上现成的待办，或这句话里没有能做的事。
         const text =
@@ -132,10 +133,10 @@ export function VoicePillApp() {
         show({ kind: 'tip', text, toSettings: false })
         return
       }
-      // 新建、完成、取消完成、改时间、改标题马上落地；删除先问一句。
-      if (plan.created.length > 0 || plan.changes.length > 0) tasks.replace(plan.next)
+      // 新建、完成、改时间、归类、设紧急度、开始做等马上落地（分类可能多了 AI 新建的）；删除先问一句。
+      tasks.replace(plan.next.tasks, plan.next.categories)
       const undo: PillUndo = { createdIds: plan.createdIds, changes: plan.changes, removed: [] }
-      const text: DoneText = { created: plan.created, changes: plan.changes }
+      const text: DoneText = { created: plan.created, changes: plan.changes, notes: plan.notes }
       if (plan.deletes.length > 0) show({ kind: 'ask', deletes: plan.deletes, undo, result: text })
       else show(donePhase(text, undo, 0))
     },
