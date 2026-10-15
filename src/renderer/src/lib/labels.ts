@@ -1,8 +1,11 @@
 import { toDateKey } from '@shared/dates'
-import type { Task } from '@shared/types'
+import type { Task, Urgency } from '@shared/types'
 
 const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六']
 const SHORT_WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+
+/** 紧急度的说法：紧急 / 普通 / 不急。 */
+export const URGENCY_TEXT: Record<Urgency, string> = { high: '紧急', normal: '普通', low: '不急' }
 
 export type WhenLabel = { kind: 'time' | 'date' | 'overdue'; text: string }
 

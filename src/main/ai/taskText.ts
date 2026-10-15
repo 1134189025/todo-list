@@ -1,4 +1,5 @@
 // 发给 AI 的待办文字：一条一行、日期写短，省输入长度。
+import type { Task } from '@shared/types'
 
 /** 标题里的换行、制表符压成一个空格，一条待办只占一行。 */
 export function oneLine(text: string): string {
@@ -19,4 +20,13 @@ export function shortDate(dateKey: string): string {
 export function readNumber(value: unknown): number | null {
   const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value.trim()) : NaN
   return Number.isInteger(number) && number >= 1 ? number : null
+}
+
+/** 紧急度（普通不写）和进行中，给 AI 看的标记。 */
+export function taskFlags(task: Pick<Task, 'urgency' | 'inProgress'>): string[] {
+  const flags: string[] = []
+  if (task.urgency === 'high') flags.push('紧急')
+  if (task.urgency === 'low') flags.push('不急')
+  if (task.inProgress) flags.push('进行中')
+  return flags
 }
