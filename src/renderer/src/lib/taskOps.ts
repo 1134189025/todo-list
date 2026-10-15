@@ -1,5 +1,5 @@
-import { normalizeCategoryName } from '@shared/text'
-import { DEFAULT_URGENCY, type Category, type Task, type TaskSource, type Urgency } from '@shared/types'
+import { normalizeCategoryName, sameCategoryName } from '@shared/text'
+import { CATEGORY_LIMIT, DEFAULT_URGENCY, type Category, type Task, type TaskSource, type Urgency } from '@shared/types'
 
 export type NewTaskFields = {
   title: string
@@ -47,6 +47,32 @@ export function toggleInProgress(task: Task): Task {
 /** 新建一个分类，id 用 crypto.randomUUID()，名字先规范化。调用方要确认规范化后不为空。 */
 export function createCategory(name: string, nowIso: string): Category {
   return { id: crypto.randomUUID(), name: normalizeCategoryName(name), createdAt: nowIso }
+}
+
+/** 分类簿：一次操作里按名字找或新建分类用的。list 是改后的完整分类列表，created 是这次新建的，full 是因为分类已满没能建的次数。 */
+export type CategoryBook = { list: Category[]; created: Category[]; full: number }
+
+export function newCategoryBook(categories: readonly Category[]): CategoryBook {
+  return { list: [...categories], created: [], full: 0 }
+}
+
+/**
+ * 按名字找分类（规范化后不区分大小写）：有就用已有的；没有就新建并追加到 list；
+ * 已满（CATEGORY_LIMIT）时不建、返回 null 并把 full 加一。名字规范化后为空也返回 null。
+ */
+export function bookCategory(book: CategoryBook, name: string, nowIso: string): Category | null {
+  const normalized = normalizeCategoryName(name)
+  if (normalized === '') return null
+  const existing = book.list.find((category) => sameCategoryName(category.name, normalized))
+  if (existing !== undefined) return existing
+  if (book.list.length >= CATEGORY_LIMIT) {
+    book.full += 1
+    return null
+  }
+  const created = createCategory(normalized, nowIso)
+  book.list.push(created)
+  book.created.push(created)
+  return created
 }
 
 /** 撤销添加：从当前列表去掉这次加的那几条。 */

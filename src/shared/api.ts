@@ -1,4 +1,5 @@
 import type { TaskPatch, TasksSnapshot } from './taskPatch'
+import type { Urgency } from './types'
 
 export type ErrorCode =
   | 'NOT_CONFIGURED'
@@ -30,6 +31,11 @@ export type FloatWindowSettings = {
 
 /** 悬浮窗最低不透明度：再低就看不清字了。 */
 export const FLOAT_OPACITY_MIN = 0.3
+
+/** 胶囊窗口按内容向主进程申请的尺寸；主进程只接受这个范围里的整数，超出就忽略。 */
+export type PillSize = { width: number; height: number }
+
+export const PILL_SIZE_LIMITS = { minWidth: 120, maxWidth: 480, minHeight: 40, maxHeight: 240 } as const
 
 /**
  * AI 接口格式：openai = OpenAI 兼容（{地址}/chat/completions）；
@@ -67,11 +73,25 @@ export type SettingsPatch = {
   floatWindow?: Partial<FloatWindowSettings>   // 只改传了的字段
 }
 
-export type ParsedItem = { title: string; date: string | null; time: string | null }
+/**
+ * AI 指令里新建的一条待办。category：分类名（规范化后），null = AI 没写或拿不准，不归类；
+ * urgency：紧急度，null = AI 没写（渲染进程当普通）。
+ */
+export type ParsedItem = {
+  title: string
+  date: string | null
+  time: string | null
+  category: string | null
+  urgency: Urgency | null
+}
 
 /**
  * AI 指令识别出的一项操作。id 是真实任务 id（主进程已把编号映射回来）。
  * reschedule 里 date / time 不出现 = 不改；null = 清掉（date 为 null 时 time 也清掉）。
+ * categorize：category 为分类名，分类不存在时新建；null = 移出分类。
+ * urgency：level 为 high（紧急）/ normal（普通）/ low（不急）。
+ * start / pause：开始做（设为进行中）/ 取消进行中。
+ * createCategory：只新建分类，不动任务；同名已存在时不建。
  */
 export type AiAction =
   | { op: 'add'; item: ParsedItem }
@@ -80,6 +100,11 @@ export type AiAction =
   | { op: 'reschedule'; id: string; date?: string | null; time?: string | null }
   | { op: 'rename'; id: string; title: string }
   | { op: 'delete'; id: string }
+  | { op: 'categorize'; id: string; category: string | null }
+  | { op: 'urgency'; id: string; level: Urgency }
+  | { op: 'start'; id: string }
+  | { op: 'pause'; id: string }
+  | { op: 'createCategory'; name: string }
 
 /**
  * unmatched：用户提到了、但在现有待办里对不上的说法。
@@ -131,13 +156,27 @@ export interface QingxinApi {
   }
   events: {
     onSummaryShow(cb: (s: SummaryResult) => void): () => void  // 返回取消订阅函数
-    onVoiceHotkey(cb: () => void): () => void                   // 全局快捷键被按下
+    /**
+     * 主进程让语音胶囊开始 / 结束录音（全局语音键、或悬浮窗的语音按钮）。
+     * 只有胶囊页面订阅它：主窗口不再接收全局语音键，输入框左边的麦克风仍然自己录自己的。
+     */
+    onVoiceHotkey(cb: () => void): () => void
     onTasksChanged(cb: (snapshot: TasksSnapshot) => void): () => void  // 别的窗口改了任务或分类
     onSettingsChanged(cb: (s: PublicSettings) => void): () => void  // 设置变了（托盘、悬浮窗、别的窗口）
+  }
+  /** 语音胶囊页面专用的通道：主进程负责窗口的显示、位置和隐藏。 */
+  voicePill: {
+    /** 页面加载完、事件订阅就绪；主进程收到之前的触发会排队，这时再补发。 */
+    ready(): Promise<Result<null>>
+    /** 按当前内容申请窗口大小：宽 120–480、高 40–240 的整数，主进程保持底边不动向上长。 */
+    resize(size: PillSize): Promise<Result<null>>
+    /** 隐藏胶囊（录音中被隐藏 = 放弃这次录音）。 */
+    hide(): Promise<Result<null>>
   }
   app: {
     isSandbox: boolean
     showMain(): Promise<Result<null>>   // 显示并聚焦主窗口（悬浮窗里用）
+    toggleVoicePill(): Promise<Result<null>>   // 触发语音胶囊（悬浮窗的语音按钮）
   }
 }
 
@@ -153,9 +192,14 @@ export const IPC = {
   aiTestConnection: 'ai:testConnection',
   aiCancel: 'ai:cancel',
   summaryShow: 'summary:show',
+  /** 主进程 → 胶囊页面：开始 / 结束录音（全局语音键、悬浮窗语音按钮）。 */
   voiceHotkey: 'voice:hotkey',
+  voicePillReady: 'voicePill:ready',
+  voicePillResize: 'voicePill:resize',
+  voicePillHide: 'voicePill:hide',
   tasksChanged: 'tasks:changed',
   settingsChanged: 'settings:changed',
   appIsSandbox: 'app:isSandbox',
-  appShowMain: 'app:showMain'
+  appShowMain: 'app:showMain',
+  appToggleVoicePill: 'app:toggleVoicePill'
 } as const

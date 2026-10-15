@@ -5,6 +5,7 @@ import type { TasksSnapshot } from '@shared/taskPatch'
 import {
   validateApiKey,
   validateCommandRequest,
+  validatePillSize,
   validateRequestId,
   validateSettingsPatch,
   validateSummarizeRequest,
@@ -18,12 +19,14 @@ import { isSandbox } from './sandbox'
 import type { SettingsService } from './settingsService'
 import type { SettingsStore } from './store/settingsStore'
 import type { TasksStore } from './store/tasksStore'
+import type { VoicePillManager } from './voicePill'
 
 export type IpcDeps = {
   tasks: TasksStore
   settings: SettingsStore
   settingsService: SettingsService
   showMain: () => void
+  voicePill: VoicePillManager
 }
 
 function invalidInput(message: string): Result<never> {
@@ -106,6 +109,26 @@ export function registerIpcHandlers(deps: IpcDeps): void {
 
   handle(IPC.appShowMain, () => {
     deps.showMain()
+    return ok(null)
+  })
+
+  // 语音胶囊：主进程负责窗口的显示、位置和隐藏，页面只负责内容和申请大小。
+  handle(IPC.voicePillReady, () => {
+    deps.voicePill.ready()
+    return ok(null)
+  })
+  handle(IPC.voicePillResize, (raw) => {
+    const checked = validatePillSize(raw)
+    if (!checked.ok) return invalidInput(checked.message)
+    deps.voicePill.resize(checked.value)
+    return ok(null)
+  })
+  handle(IPC.voicePillHide, () => {
+    deps.voicePill.hide()
+    return ok(null)
+  })
+  handle(IPC.appToggleVoicePill, () => {
+    deps.voicePill.trigger()
     return ok(null)
   })
 

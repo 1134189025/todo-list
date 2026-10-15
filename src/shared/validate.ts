@@ -1,4 +1,4 @@
-import { FLOAT_OPACITY_MIN, type AiApiFormat, type CommandInput, type FloatWindowSettings, type SettingsPatch, type VoiceClip } from './api'
+import { FLOAT_OPACITY_MIN, PILL_SIZE_LIMITS, type AiApiFormat, type CommandInput, type FloatWindowSettings, type PillSize, type SettingsPatch, type VoiceClip } from './api'
 import { TASK_FIELDS, type CategoryPatch, type TaskFields, type TaskPatch } from './taskPatch'
 import { isDateKey, isIsoTimestamp, isTimeKey } from './dates'
 import { normalizeCategoryName, TITLE_MAX } from './text'
@@ -305,6 +305,20 @@ export function validateRequestId(value: unknown): Validation<string> {
   const requestId = boundedText(value, 1, REQUEST_ID_MAX)
   if (requestId === null) return invalid('请求编号不合法')
   return valid(requestId)
+}
+
+/** 胶囊窗口按内容申请的尺寸：120–480 × 40–240 的整数，其它一律不合法。 */
+export function validatePillSize(value: unknown): Validation<PillSize> {
+  if (!isRecord(value)) return invalid('窗口大小格式不正确')
+  const { width, height } = value
+  const { minWidth, maxWidth, minHeight, maxHeight } = PILL_SIZE_LIMITS
+  if (!Number.isInteger(width) || (width as number) < minWidth || (width as number) > maxWidth) {
+    return invalid('窗口宽度不合法')
+  }
+  if (!Number.isInteger(height) || (height as number) < minHeight || (height as number) > maxHeight) {
+    return invalid('窗口高度不合法')
+  }
+  return valid({ width: width as number, height: height as number })
 }
 
 // 录音上限：base64 约 4 MB（16 kHz 单声道 16 位约 90 秒），只收 WAV。

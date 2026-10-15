@@ -9,7 +9,7 @@ import type { TasksStore } from '../store/tasksStore'
 import { completeChat, type SummaryKind } from './client'
 import { extractJsonObject, truncateText } from './parse'
 import { buildSummaryMessages } from './prompts'
-import { quoted, readNumber, shortDate } from './taskText'
+import { quoted, readNumber, shortDate, taskFlags } from './taskText'
 
 const HEADLINE_MAX = 40
 const OVERVIEW_MAX = 200
@@ -28,16 +28,18 @@ function readText(value: unknown, max: number): string {
 }
 
 function openTodayLine(task: Task, index: number, today: string): string {
-  const notes: string[] = []
+  const notes: string[] = [...taskFlags(task)]
   if (isOverdue(task, today) && task.dueDate !== null) notes.push(`已过期 ${shortDate(task.dueDate)}`)
   if (task.dueTime !== null) notes.push(task.dueTime)
-  const suffix = notes.length === 0 ? '' : `（${notes.join(' ')}）`
+  const suffix = notes.length === 0 ? '' : `（${notes.join('，')}）`
   return `${index + 1}. ${quoted(task.title)}${suffix}`
 }
 
 function upcomingItem(task: Task): string {
   const when = [task.dueDate === null ? '' : shortDate(task.dueDate), task.dueTime ?? ''].filter(Boolean).join(' ')
-  return `${when} ${quoted(task.title)}`
+  const flags = taskFlags(task)
+  const suffix = flags.length === 0 ? '' : `（${flags.join('，')}）`
+  return `${when} ${quoted(task.title)}${suffix}`
 }
 
 // 用紧凑的纯文本代替 JSON：今天未完成用 1、2、3 编号（AI 只回编号，比回完整 id 短得多），

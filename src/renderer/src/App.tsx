@@ -17,6 +17,7 @@ import { TitleBar } from './components/TitleBar'
 import { Toast } from './components/Toast'
 import { VoiceCard } from './components/VoiceCard'
 import { isAiConfigured } from './lib/aiForm'
+import { callApi } from './lib/callApi'
 import { categoryIdOrNull, countCategories, filterTasks } from './lib/categoryFilter'
 import { localSummaryLine } from './lib/localSummary'
 import { createTask, restoreAt, toggleDone, toggleInProgress, withoutIds } from './lib/taskOps'
@@ -100,7 +101,9 @@ export function App() {
     onClip: (clip) => {
       setNotice(null)
       aiFlow.startVoice(clip)
-    }
+    },
+    // 全局语音键不再弹出主窗口：按下改为在屏幕底部弹出语音胶囊。
+    onHotkey: () => void callApi(() => window.api.app.toggleVoicePill())
   })
   const summary = useSummary(list, today)
 

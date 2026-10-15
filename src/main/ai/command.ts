@@ -10,15 +10,15 @@ import {
   toDateKey
 } from '@shared/dates'
 import { fail, ok } from '@shared/result'
-import { truncateTitle } from '@shared/text'
-import type { Task } from '@shared/types'
+import { sameCategoryName, truncateTitle } from '@shared/text'
+import type { Category, Task } from '@shared/types'
 import { isRecord } from '@shared/validate'
 import type { SettingsStore } from '../store/settingsStore'
 import type { TasksStore } from '../store/tasksStore'
 import { completeChat } from './client'
-import { extractJsonObject, sanitizeItem, truncateText } from './parse'
+import { extractJsonObject, readCategoryName, readUrgency, sanitizeItem, truncateText } from './parse'
 import { buildCommandMessages, COMMAND_ACTION_LIMIT, HEARD_MAX, REPLY_MAX } from './prompts'
-import { oneLine, quoted, readNumber, shortDate } from './taskText'
+import { oneLine, quoted, readNumber, shortDate, taskFlags } from './taskText'
 
 const MAX_OPEN_LISTED = 100
 const MAX_DONE_LISTED = 20
@@ -37,7 +37,7 @@ function listCandidates(snapshot: Task[], today: string): Task[] {
   return [...[...openToday, ...openLater].slice(0, MAX_OPEN_LISTED), ...doneToday]
 }
 
-function describe(task: Task, today: string): string {
+function whenText(task: Task, today: string): string {
   if (task.done) return '已完成'
   const time = task.dueTime === null ? '' : ` ${task.dueTime}`
   if (task.dueDate === null) return '今天，未定日期'
@@ -46,9 +46,29 @@ function describe(task: Task, today: string): string {
   return `${shortDate(task.dueDate)}${time}`
 }
 
-function candidatesText(candidates: Task[], today: string): string {
+function categoryNames(categories: readonly Category[]): Map<string, string> {
+  return new Map(categories.map((category) => [category.id, category.name]))
+}
+
+// 一条待办的说明：时间、紧急度（普通不写）、进行中、分类（没有或指向不存在的分类就不写）。
+function describe(task: Task, today: string, names: ReadonlyMap<string, string>): string {
+  const parts = [whenText(task, today), ...taskFlags(task)]
+  const category = task.categoryId === null ? undefined : names.get(task.categoryId)
+  if (category !== undefined) parts.push(`分类${quoted(category)}`)
+  return parts.join('，')
+}
+
+function candidatesText(candidates: Task[], names: ReadonlyMap<string, string>, today: string): string {
   if (candidates.length === 0) return '无'
-  return candidates.map((task, index) => `${index + 1}. ${quoted(task.title)}（${describe(task, today)}）`).join('\n')
+  return candidates
+    .map((task, index) => `${index + 1}. ${quoted(task.title)}（${describe(task, today, names)}）`)
+    .join('\n')
+}
+
+// 「现有分类」那一行：没有分类时写「无」。分类名也用引号括起来，和标题一样只是数据。
+function categoriesText(categories: readonly Category[]): string {
+  if (categories.length === 0) return '现有分类：无'
+  return `现有分类：${categories.map((category) => quoted(category.name)).join('、')}`
 }
 
 // reschedule 的一个字段：没写 = 不改（undefined）；null = 清掉；格式不对也当没写。
@@ -60,7 +80,16 @@ function readField(entry: Record<string, unknown>, key: 'date' | 'time'): string
   return typeof value === 'string' && check(value.trim()) ? value.trim() : undefined
 }
 
-function toTaskAction(entry: Record<string, unknown>, task: Task): AiAction | null {
+// 分类改动：category 为 null = 移出分类（任务本来就没有分类时不做）；分类名没写、或和任务现在的分类同名时不做。
+function toCategorize(entry: Record<string, unknown>, task: Task, names: ReadonlyMap<string, string>): AiAction | null {
+  const current = task.categoryId === null ? null : (names.get(task.categoryId) ?? null)
+  if (entry.category === null) return current === null ? null : { op: 'categorize', id: task.id, category: null }
+  const name = readCategoryName(entry.category)
+  if (name === null || (current !== null && sameCategoryName(current, name))) return null
+  return { op: 'categorize', id: task.id, category: name }
+}
+
+function toTaskAction(entry: Record<string, unknown>, task: Task, names: ReadonlyMap<string, string>): AiAction | null {
   switch (entry.op) {
     case 'complete':
       return task.done ? null : { op: 'complete', id: task.id }
@@ -81,6 +110,16 @@ function toTaskAction(entry: Record<string, unknown>, task: Task): AiAction | nu
       if (time !== undefined) action.time = time
       return action
     }
+    case 'categorize':
+      return toCategorize(entry, task, names)
+    case 'urgency': {
+      const level = readUrgency(entry.level)
+      return level === null || level === task.urgency ? null : { op: 'urgency', id: task.id, level }
+    }
+    case 'start':
+      return task.done || task.inProgress ? null : { op: 'start', id: task.id }
+    case 'pause':
+      return task.inProgress ? { op: 'pause', id: task.id } : null
     default:
       return null
   }
@@ -89,11 +128,13 @@ function toTaskAction(entry: Record<string, unknown>, task: Task): AiAction | nu
 // 逐项校验：编号必须在列表里，操作要对得上任务状态（已完成的不能再完成），同一任务同一操作只留第一次。
 function readActions(
   reply: Record<string, unknown>,
-  candidates: Task[]
+  candidates: Task[],
+  categories: readonly Category[]
 ): Result<Omit<AiCommandResult, 'heard' | 'reply'>> {
   const raw: unknown = reply.actions
   if (!Array.isArray(raw)) return fail('BAD_RESPONSE', BAD_REPLY_MESSAGE)
   const entries: unknown[] = raw
+  const names = categoryNames(categories)
   const actions: AiAction[] = []
   const unmatched: string[] = []
   const seen = new Set<string>()
@@ -109,11 +150,21 @@ function readActions(
       if (item !== null) actions.push({ op: 'add', item })
       continue
     }
+    if (entry.op === 'create_category') {
+      // 同名分类已存在就不建；同一次结果里同名只留一个（不区分大小写）。
+      const name = readCategoryName(entry.name)
+      if (name === null || categories.some((category) => sameCategoryName(category.name, name))) continue
+      const key = `createCategory:${name.toLowerCase()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      actions.push({ op: 'createCategory', name })
+      continue
+    }
     const number = readNumber(entry.id)
     const task = number === null ? undefined : candidates[number - 1]
     if (task === undefined) continue
-    const action = toTaskAction(entry, task)
-    if (action === null || action.op === 'add') continue
+    const action = toTaskAction(entry, task, names)
+    if (action === null || action.op === 'add' || action.op === 'createCategory') continue
     const key = `${action.op}:${action.id}`
     if (seen.has(key)) continue
     seen.add(key)
@@ -155,16 +206,19 @@ export async function runCommand(
   request: { requestId: string; input: CommandInput }
 ): Promise<Result<AiCommandResult>> {
   const now = new Date()
-  const candidates = listCandidates(tasks.snapshot(), toDateKey(now))
+  const today = toDateKey(now)
+  const { tasks: snapshot, categories } = tasks.state()
+  const candidates = listCandidates(snapshot, today)
+  const names = categoryNames(categories)
   const reply = await completeChat(
     settings,
     { kind: 'command', requestId: request.requestId },
-    buildCommandMessages(candidatesText(candidates, toDateKey(now)), request.input, now)
+    buildCommandMessages(candidatesText(candidates, names, today), categoriesText(categories), request.input, now)
   )
   if (!reply.ok) return reply
   const json = extractJsonObject(reply.data, (data) => Array.isArray(data.actions))
   if (!json.ok) return json
-  const actions = readActions(json.data, candidates)
+  const actions = readActions(json.data, candidates, categories)
   if (!actions.ok) return actions
   return ok({
     ...actions.data,

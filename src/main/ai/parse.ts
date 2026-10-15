@@ -1,7 +1,8 @@
 import type { ParsedItem, Result } from '@shared/api'
 import { isDateKey, isTimeKey } from '@shared/dates'
 import { fail, ok } from '@shared/result'
-import { truncateTitle } from '@shared/text'
+import { normalizeCategoryName, truncateTitle } from '@shared/text'
+import { URGENCIES, type Urgency } from '@shared/types'
 import { isRecord } from '@shared/validate'
 
 const MAX_OBJECT_CANDIDATES = 20
@@ -93,12 +94,30 @@ export function extractJsonObject(
   return fail('BAD_RESPONSE', NOT_JSON_MESSAGE)
 }
 
-/** AI 给的一条新建待办：标题去空白并截断，日期不是真实日期就置 null，没有日期时不留时间。 */
+/** AI 写的紧急度：三档之一才算，其它（含没写）返回 null。 */
+export function readUrgency(value: unknown): Urgency | null {
+  return URGENCIES.find((known) => known === value) ?? null
+}
+
+/** AI 写的分类名：规范化后不为空才算，否则返回 null。 */
+export function readCategoryName(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const name = normalizeCategoryName(value)
+  return name === '' ? null : name
+}
+
+/** AI 给的一条新建待办：标题去空白并截断，日期不是真实日期就置 null，没有日期时不留时间；分类和紧急度没写或不合法就是 null。 */
 export function sanitizeItem(value: unknown): ParsedItem | null {
   if (!isRecord(value) || typeof value.title !== 'string') return null
   const title = value.title.trim()
   if (title === '') return null
   const date = typeof value.date === 'string' && isDateKey(value.date) ? value.date : null
   const rawTime = typeof value.time === 'string' && isTimeKey(value.time) ? value.time : null
-  return { title: truncateTitle(title), date, time: date === null ? null : rawTime }
+  return {
+    title: truncateTitle(title),
+    date,
+    time: date === null ? null : rawTime,
+    category: readCategoryName(value.category),
+    urgency: readUrgency(value.urgency)
+  }
 }

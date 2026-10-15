@@ -4,7 +4,7 @@ import type { Task } from '@shared/types'
 import { truncateTitle } from '@shared/text'
 import { callApi } from '../lib/callApi'
 import {
-  applyDirectActions,
+  applyAiDirect,
   changesMessage,
   type DeleteDraft,
   isDirectAction,
@@ -13,7 +13,7 @@ import {
   type TaskChange,
   toDeleteDraft
 } from '../lib/aiActions'
-import { type DraftItem, type DraftPatch, draftToTask, pickableItems, toDraftItem } from '../lib/aiDraft'
+import { type DraftItem, type DraftPatch, draftsToTasks, pickableItems, toDraftItem } from '../lib/aiDraft'
 import { createTask, restoreAt, withoutIds } from '../lib/taskOps'
 import type { TasksController } from './useTasks'
 
@@ -25,6 +25,11 @@ const LOG_LIMIT = 30
 
 /** 已经直接执行的改动和提示文字；id 用来在用户从提示条撤销后把它从卡片上去掉。 */
 export type Applied = { id: string; message: string; changes: TaskChange[] }
+
+/** 直接执行的结果：applied 是能撤销的那部分（没有任务改动时为 null）；message 是提示文字（什么都没做时为 null）。 */
+type DirectResult = { applied: Applied | null; message: string | null }
+
+const NO_DIRECT: DirectResult = { applied: null, message: null }
 
 /**
  * 这句指令说了什么。script：打字的原话，或 AI 从录音里听写出的原话（还没听写、没听清时为空）；
@@ -72,7 +77,10 @@ export type AiFlow = {
 }
 
 type Options = {
-  tasks: Pick<TasksController, 'snapshot' | 'replaceWithUndo' | 'offerUndo'>
+  tasks: Pick<
+    TasksController,
+    'snapshot' | 'categoriesSnapshot' | 'replace' | 'replaceWithUndo' | 'offerUndo' | 'notify'
+  >
   restoreDraft: (text: string) => void
   today: string
 }
@@ -131,16 +139,30 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
     }
   }
 
-  // 直接执行的部分作用在收到结果时的当前列表上；什么都没改时返回 null。
-  function applyDirect(result: AiCommandResult): Applied | null {
+  // 直接执行的部分作用在收到结果时的当前列表和分类上。改了任务的进提示条（可撤销）；
+  // 只动了分类（新建分类，或分类已满没能建）的分类撤不掉，只弹提示。什么都没做时 applied 和 message 都是 null。
+  function applyDirect(result: AiCommandResult): DirectResult {
     const current = tasks.snapshot()
-    if (current === null) return null
+    const currentCategories = tasks.categoriesSnapshot()
     const direct = result.actions.filter(isDirectAction)
-    const { next, changes } = applyDirectActions(current, direct, new Date().toISOString(), today)
-    if (changes.length === 0) return null
-    const applied: Applied = { id: crypto.randomUUID(), message: changesMessage(changes, today), changes }
-    tasks.replaceWithUndo(next, applied.message, undoApplied(applied))
-    return applied
+    if (current === null || currentCategories === null || direct.length === 0) return NO_DIRECT
+    const outcome = applyAiDirect(
+      { tasks: current, categories: currentCategories },
+      direct,
+      new Date().toISOString(),
+      today
+    )
+    const notes = { categories: outcome.next.categories, created: outcome.createdCategories, full: outcome.categoryFull }
+    if (outcome.changes.length === 0 && notes.created.length === 0 && notes.full === 0) return NO_DIRECT
+    const message = changesMessage(outcome.changes, today, notes)
+    if (outcome.changes.length === 0) {
+      tasks.replace(outcome.next.tasks, outcome.next.categories)
+      tasks.notify(message)
+      return { applied: null, message }
+    }
+    const applied: Applied = { id: crypto.randomUUID(), message, changes: outcome.changes }
+    tasks.replaceWithUndo(outcome.next.tasks, message, undoApplied(applied), outcome.next.categories)
+    return { applied, message }
   }
 
   // 关掉确认 / 提示卡片时，直接执行的那部分可能已经过了提示条的 5 秒：再给一次撤销的机会（已经撤销过就不再给）。
@@ -154,8 +176,8 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
   }
 
   function receive(said: Said, result: AiCommandResult): void {
-    const applied = applyDirect(result)
-    remember(said, result.reply ?? applied?.message ?? null)
+    const direct = applyDirect(result)
+    remember(said, result.reply ?? direct.message)
     const current = tasks.snapshot() ?? []
     const items = result.actions.flatMap((action) => (action.op === 'add' ? [toDraftItem(action.item)] : []))
     const deletes = result.actions.flatMap((action) => {
@@ -164,10 +186,10 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
       return draft === null ? [] : [draft]
     })
     if (items.length > 0 || deletes.length > 0) {
-      setStage({ kind: 'confirm', ...said, items, deletes, unmatched: result.unmatched, applied })
+      setStage({ kind: 'confirm', ...said, items, deletes, unmatched: result.unmatched, applied: direct.applied })
     } else if (result.unmatched.length > 0) {
-      setStage({ kind: 'unmatched', ...said, unmatched: result.unmatched, applied })
-    } else if (applied === null) {
+      setStage({ kind: 'unmatched', ...said, unmatched: result.unmatched, applied: direct.applied })
+    } else if (direct.message === null) {
       setStage({ kind: 'empty', ...said })
     } else {
       setStage({ kind: 'idle' })
@@ -261,9 +283,11 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
   function confirmItems(): void {
     if (stage.kind !== 'confirm' || confirmCount(stage) === 0) return
     const current = tasks.snapshot()
-    if (current === null) return
+    const currentCategories = tasks.categoriesSnapshot()
+    if (current === null || currentCategories === null) return
     const nowIso = new Date().toISOString()
-    const created: Task[] = pickableItems(stage.items).map((item) => draftToTask(item, nowIso))
+    const picked = draftsToTasks(pickableItems(stage.items), currentCategories, nowIso)
+    const created = picked.tasks
     const deleteIds = new Set(stage.deletes.filter((item) => item.include).map((item) => item.taskId))
     const { next, removed } = removeTasks(current, deleteIds)
     // 要删的已经被别处删掉、也没有新建：什么都不用做，只把直接执行那部分的撤销再给一次。
@@ -275,12 +299,20 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
     const createdIds = new Set(created.map((task) => task.id))
     const directChanges = stage.applied?.changes ?? []
     const extra = directChanges.length === 0 ? '' : `，另有 ${directChanges.length} 项已直接处理`
-    // 撤销 = 撤销这整句指令：先撤新建和删除，再撤直接执行的改动。
-    tasks.replaceWithUndo([...created, ...next], `${resultMessage(created.length, removed.length)}${extra}`, (now) =>
-      revertChanges(
-        removed.reduce((list, entry) => restoreAt(list, entry.task, entry.index), withoutIds(now, createdIds)),
-        directChanges
-      )
+    const categoryNote = [
+      picked.createdCategories.length > 0 ? `，新建 ${picked.createdCategories.length} 个分类` : '',
+      picked.categoryFull > 0 ? `，分类已满，${picked.categoryFull} 件没有归类` : ''
+    ].join('')
+    // 撤销 = 撤销这整句指令：先撤新建和删除，再撤直接执行的改动。新建的分类保留（撤销只撤任务）。
+    tasks.replaceWithUndo(
+      [...created, ...next],
+      `${resultMessage(created.length, removed.length)}${categoryNote}${extra}`,
+      (now) =>
+        revertChanges(
+          removed.reduce((list, entry) => restoreAt(list, entry.task, entry.index), withoutIds(now, createdIds)),
+          directChanges
+        ),
+      picked.categories
     )
     setStage({ kind: 'idle' })
   }

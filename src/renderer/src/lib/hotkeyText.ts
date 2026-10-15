@@ -9,7 +9,7 @@ export function hotkeyStatusText(status: HotkeyStatus, accelerator: string | nul
   if (accelerator === null) return '未使用，可以设置一个组合键'
   switch (status) {
     case 'registered':
-      return '已生效，在任何窗口按下即可说话'
+      return '已生效，按下会在屏幕底部弹出录音胶囊'
     case 'failed':
       return isMouseAccelerator(accelerator) ? '鼠标侧键监听没能启动，请换一个组合键' : '被其它程序占用，请换一个组合键'
     case 'sandbox':

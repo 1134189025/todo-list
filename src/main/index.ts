@@ -11,6 +11,7 @@ import { createSettingsStore } from './store/settingsStore'
 import { createTasksStore } from './store/tasksStore'
 import { createTray, type TrayController } from './tray'
 import { createMainWindow } from './window'
+import { createVoicePillManager } from './voicePill'
 
 let mainWindow: BrowserWindow | null = null
 let quitting = false
@@ -26,7 +27,8 @@ async function start(): Promise<void> {
   restrictPermissions()
   const userData = app.getPath('userData')
   let tray: TrayController | null = null
-  const hotkey = createHotkeyManager(() => mainWindow)
+  const voicePill = createVoicePillManager()
+  const hotkey = createHotkeyManager({ onVoiceHotkey: () => voicePill.trigger() })
   const tasks = createTasksStore(join(userData, 'tasks.json'))
   const settings = createSettingsStore(join(userData, 'settings.json'), {
     hotkeyStatus: () => hotkey.status(),
@@ -48,7 +50,7 @@ async function start(): Promise<void> {
     broadcast: broadcastSettings
   })
 
-  registerIpcHandlers({ tasks, settings, settingsService, showMain: focusMainWindow })
+  registerIpcHandlers({ tasks, settings, settingsService, showMain: focusMainWindow, voicePill })
   const scheduler = startScheduler({ tasks, settings, getWindow: () => mainWindow })
   hotkey.start(settings.getVoiceHotkey())
   mainWindow = createMainWindow({
