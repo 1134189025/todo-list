@@ -1,7 +1,7 @@
 {
   "name": "qingxin-todo",
   "productName": "清新待办",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "清新待办：Windows 桌面待办应用",
   "author": "清新待办",
   "private": true,
