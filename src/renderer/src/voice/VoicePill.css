@@ -1,0 +1,153 @@
+/* 语音胶囊窗口：整个窗口透明，内容自己决定窗口大小（主进程据此调整，底边不动向上长）。 */
+html.pill-page,
+html.pill-page body,
+html.pill-page #root {
+  height: auto;
+  min-height: 0;
+  width: max-content;
+  background: transparent;
+  overflow: hidden;
+}
+
+html.pill-page body,
+html.pill-page #root {
+  display: block;
+}
+
+.pill-root {
+  display: block;
+  padding: 8px;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-pill-bg);
+  color: var(--color-pill-ink);
+  box-shadow: 0 3px 10px rgba(18, 22, 20, 0.35);
+}
+
+/* 一行文字的胶囊：结果、提示、删除确认。 */
+.pill-row {
+  max-width: 440px;
+}
+
+.pill-text {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.pill-lines {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pill-sub {
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.72);
+  overflow-wrap: anywhere;
+}
+
+/* 录音中：✕、波形小点、✓。 */
+.pill-recording {
+  padding: 6px 7px;
+  gap: 10px;
+}
+
+.pill-icon-button {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-pill-button);
+  color: var(--color-pill-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pill-icon-button:hover {
+  background: var(--color-pill-button-hover);
+}
+
+.pill-icon-button.is-solid {
+  background: var(--color-pill-ink);
+  color: var(--color-pill-bg);
+}
+
+.pill-icon-button.is-solid:hover {
+  background: var(--color-pill-solid-hover);
+}
+
+.pill-wave {
+  flex: none;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pill-dot {
+  width: 3px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--color-pill-ink);
+  transform: scaleY(0.3);
+  transition: transform 60ms linear;
+}
+
+.pill-button {
+  flex: none;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--color-pill-ink);
+  font-size: 13px;
+}
+
+.pill-button:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.pill-button.is-quiet {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.pill-button.is-danger {
+  background: var(--color-pill-danger);
+}
+
+.pill-button.is-danger:hover {
+  background: var(--color-pill-danger-hover);
+}
+
+/* 处理中：一闪一闪的小点。 */
+.pill-blip {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--color-mint);
+  animation: pill-pulse 1s ease-in-out infinite;
+}
+
+@keyframes pill-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}

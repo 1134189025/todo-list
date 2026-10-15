@@ -37,6 +37,11 @@ type Options = {
   blocked: boolean
   availability: VoiceAvailability
   onClip: (clip: VoiceClip) => void
+  /**
+   * 语音键按下时做什么；不传就是开始 / 结束这次录音。
+   * 主窗口传「触发语音胶囊」：全局语音键不再弹主窗口，改成屏幕底部的胶囊。
+   */
+  onHotkey?: () => void
 }
 
 const NOTICES: Record<Exclude<VoiceAvailability, 'ok'> | RecorderFailure | 'too-short', VoiceNotice> = {
@@ -153,10 +158,11 @@ export function useVoice(options: Options): VoiceController {
 
   const level = useCallback((): number => recordingRef.current?.level() ?? 0, [])
 
-  // 全局快捷键（主进程转来）和窗口内按下同一组合；录音时 Esc 放弃。
+  // 主进程转来的语音键（胶囊用）、窗口内按下同一组合（主窗口的兜底）；录音时 Esc 放弃。
   useEffect(() => {
     if (options.blocked) return
-    const unsubscribe = window.api.events.onVoiceHotkey(toggle)
+    const press = (): void => (optionsRef.current.onHotkey ?? toggle)()
+    const unsubscribe = window.api.events.onVoiceHotkey(press)
     function onKeyDown(event: KeyboardEvent): void {
       if (event.repeat || event.isComposing) return
       const { kind } = stateRef.current
@@ -168,7 +174,7 @@ export function useVoice(options: Options): VoiceController {
       const { accelerator } = optionsRef.current
       if (accelerator === null || fromKeyboardEvent(event) !== accelerator) return
       event.preventDefault()
-      toggle()
+      press()
     }
     window.addEventListener('keydown', onKeyDown)
     return () => {
