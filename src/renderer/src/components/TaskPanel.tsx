@@ -81,7 +81,7 @@ export function TaskPanel({
       <Header today={today} done={progress.done} total={progress.total} />
       <SummaryStrip
         label={summaryHeadline === null ? '小结' : 'AI 小结'}
-        text={summaryHeadline ?? localSummaryLine(view)}
+        text={summaryHeadline ?? localSummaryLine(view, today)}
         open={summaryOpen}
         onClick={onToggleSummary}
       />

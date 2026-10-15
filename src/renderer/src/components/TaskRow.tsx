@@ -97,10 +97,11 @@ export function TaskRow({ task, today, fresh, categories, actions }: TaskRowProp
           <button
             type="button"
             className={task.inProgress ? 'task-row-start task-row-action is-on' : 'task-row-start task-row-action'}
-            aria-label={task.inProgress ? `取消进行：${task.title}` : `开始做：${task.title}`}
+            aria-label={task.inProgress ? `暂停（取消进行中）：${task.title}` : `开始做：${task.title}`}
+            title={task.inProgress ? '暂停：取消进行中' : '开始做：设为进行中'}
             onClick={() => actions.onToggleProgress(task.id)}
           >
-            {task.inProgress ? '取消进行' : '开始做'}
+            {task.inProgress ? '暂停' : '开始做'}
           </button>
         )}
         <button

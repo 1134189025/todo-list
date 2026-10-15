@@ -279,7 +279,7 @@ export function App() {
   // 左栏的计数跟着分类筛选走；页眉的进度和小结仍然是全部待办。
   const listView = buildTaskView(filterTasks(list ?? [], catalog.filter, categories), today)
   const progress = todayProgress(list ?? [], today)
-  const greeting = `${timeGreeting(new Date().getHours())}！${summaryHeadline ?? localSummaryLine(view)}`
+  const greeting = `${timeGreeting(new Date().getHours())}！${summaryHeadline ?? localSummaryLine(view, today)}`
 
   const summaryPanel = (
     <SummaryPanel

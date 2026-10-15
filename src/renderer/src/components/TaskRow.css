@@ -230,14 +230,16 @@
   background: var(--color-caption-hover);
 }
 
+/* 进行中的行：状态已经由绿底、竖条和「进行中」标签表达，这里的「暂停」和「开始做」一样只在悬停 / 聚焦时出现，
+   用描边的浅色样式，不抢任务本身的视线。 */
 .task-row-start.is-on {
-  opacity: 1;
-  background: var(--color-progress-ink);
-  color: var(--color-card);
+  background: var(--color-card);
+  box-shadow: inset 0 0 0 1px var(--color-progress-ring);
+  color: var(--color-progress-ink);
 }
 
 .task-row-start.is-on:hover {
-  background: var(--color-progress);
+  background: var(--color-progress-bg);
 }
 
 .task-row-more,
