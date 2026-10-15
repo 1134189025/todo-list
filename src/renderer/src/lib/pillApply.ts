@@ -8,7 +8,7 @@ import {
   revertChanges,
   type TaskChange
 } from './aiActions'
-import { draftToTask, toDraftItem } from './aiDraft'
+import { draftToTask, toDraftItem, whenPillText } from './aiDraft'
 import { restoreAt, withoutIds } from './taskOps'
 
 // 语音胶囊的「AI 结果 → 执行 + 撤销」。
@@ -30,6 +30,8 @@ export type PillUndo = {
 export type PillPlan = {
   /** 除删除之外执行之后的列表。 */
   next: Task[]
+  /** 这次新建的任务（结果那一行要写出标题）。 */
+  created: Task[]
   createdIds: ReadonlySet<string>
   changes: TaskChange[]
   added: number
@@ -72,6 +74,7 @@ export function planPill(
   })
   return {
     next: [...created, ...afterDirect],
+    created,
     createdIds: new Set(created.map((task) => task.id)),
     changes,
     added: created.length,
@@ -94,15 +97,29 @@ export function undoPill(tasks: readonly Task[], undo: PillUndo): Task[] {
   return revertChanges(withoutIds(restored, undo.createdIds), undo.changes)
 }
 
-/** 执行说明：AI 没写回复时用它顶一行文字，例如「已添加 2 件、完成 1 件」。 */
-export function pillSummary(added: number, changes: readonly TaskChange[], deleted: number, today: string): string {
-  if (added === 0 && deleted === 0 && changes.length === 1) return changesMessage(changes, today)
+/**
+ * 结果那一行：说清这次胶囊真正做了什么。
+ * 只有一件事时写出标题（「已添加「买牛奶」（明天 15:00）」「已完成「写周报」」），多件时按类别计数。
+ */
+export function pillSummary(
+  created: readonly Task[],
+  changes: readonly TaskChange[],
+  deleted: number,
+  today: string
+): string {
+  const [onlyCreated] = created
+  if (created.length === 1 && changes.length === 0 && deleted === 0 && onlyCreated !== undefined) {
+    const when = onlyCreated.dueDate === null ? '' : `（${whenPillText(onlyCreated.dueDate, onlyCreated.dueTime, today)}）`
+    return `已添加「${onlyCreated.title}」${when}`
+  }
+  if (created.length === 0 && deleted === 0 && changes.length === 1) return changesMessage(changes, today)
   const parts: string[] = []
-  if (added > 0) parts.push(`已添加 ${added} 件`)
+  if (created.length > 0) parts.push(`已添加 ${created.length} 件`)
   if (deleted > 0) parts.push(`已删除 ${deleted} 件`)
   const counts = new Map<string, number>()
   for (const change of changes) counts.set(OP_LABELS[change.op], (counts.get(OP_LABELS[change.op]) ?? 0) + 1)
   for (const [label, count] of counts) parts.push(`${label} ${count} 件`)
+  if (parts.length > 0 && !parts[0]!.startsWith('已')) parts[0] = `已${parts[0]}`
   return parts.join('、')
 }
 

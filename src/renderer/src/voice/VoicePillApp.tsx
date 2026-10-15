@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { PILL_SIZE_LIMITS, type AiCommandResult, type PublicSettings, type VoiceClip } from '@shared/api'
+import type { Task } from '@shared/types'
 import { CheckIcon, CloseIcon } from '../components/icons'
 import type { TaskChange } from '../lib/aiActions'
 import { aiErrorKind, aiErrorTitle } from '../lib/aiErrors'
@@ -25,11 +26,21 @@ import './VoicePill.css'
 
 /** 结果和提示停留多久后自己隐藏。 */
 const RESULT_MS = 5000
+/** 删除确认没人理时，多久后按「保留」收起（胶囊压在所有窗口上面，不能一直挂着）。 */
+const ASK_MS = 15000
 /** 波形小点的个数。 */
-const DOT_COUNT = 9
+const DOT_COUNT = 11
+/** 小点静止时是圆点（直径），说话时拉长成竖条，最高这么高。 */
+const DOT_MIN_PX = 4
+const DOT_MAX_PX = 20
+/** 低于这个音量当成没出声，小点保持圆点不动。 */
+const LEVEL_GATE = 0.04
 
-/** 结果那一行文字：AI 的回复，或执行说明。 */
-type DoneText = { reply: string | null; added: number; changes: readonly TaskChange[] }
+/**
+ * 结果那一行文字用胶囊自己的执行说明，不用 AI 的 reply：
+ * 提示词让 AI 对新建说「确认一下就加上」，而胶囊里新建是直接执行的，照搬会误导。
+ */
+type DoneText = { created: readonly Task[]; changes: readonly TaskChange[] }
 
 /** 录音相关的状态在 useVoice 里，这里只放它的下一段和提示。 */
 type Phase =
@@ -91,10 +102,10 @@ export function VoicePillApp() {
     void callApi(() => window.api.voicePill.hide())
   }, [show])
 
-  // 结果那一行：AI 的回复，没有就用执行说明。
+  // 结果那一行：胶囊自己的执行说明（见 DoneText 的说明）。
   const donePhase = useCallback(
     (text: DoneText, undo: PillUndo | null, deleted: number): Phase => {
-      const line = text.reply ?? pillSummary(text.added, text.changes, deleted, today)
+      const line = pillSummary(text.created, text.changes, deleted, today)
       return line === ''
         ? { kind: 'tip', text: '这次没有要改的待办', toSettings: false }
         : { kind: 'done', text: line, undo }
@@ -122,9 +133,9 @@ export function VoicePillApp() {
         return
       }
       // 新建、完成、取消完成、改时间、改标题马上落地；删除先问一句。
-      if (plan.added > 0 || plan.changes.length > 0) tasks.replace(plan.next)
+      if (plan.created.length > 0 || plan.changes.length > 0) tasks.replace(plan.next)
       const undo: PillUndo = { createdIds: plan.createdIds, changes: plan.changes, removed: [] }
-      const text: DoneText = { reply: result.reply, added: plan.added, changes: plan.changes }
+      const text: DoneText = { created: plan.created, changes: plan.changes }
       if (plan.deletes.length > 0) show({ kind: 'ask', deletes: plan.deletes, undo, result: text })
       else show(donePhase(text, undo, 0))
     },
@@ -241,6 +252,17 @@ export function VoicePillApp() {
     return () => window.clearTimeout(timer)
   }, [hideable, hover, hide, generation])
 
+  // 删除确认没人理：过一会儿按「保留」收起，已经做了的改动照样留着撤销。
+  const asking = phase.kind === 'ask'
+  useEffect(() => {
+    if (!asking || hover) return
+    const timer = window.setTimeout(() => {
+      const current = phaseRef.current
+      if (current.kind === 'ask') show(donePhase(current.result, current.undo, 0))
+    }, ASK_MS)
+    return () => window.clearTimeout(timer)
+  }, [asking, hover, show, donePhase, generation])
+
   // 事件订阅都就绪了再告诉主进程：在那之前收到的触发由主进程排队，这时补发。
   useEffect(() => {
     void callApi(() => window.api.voicePill.ready())
@@ -255,8 +277,11 @@ export function VoicePillApp() {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      {kind === 'starting' || kind === 'recording' || kind === 'processing' ? (
-        <RecordingPill voice={voice} onGiveUp={hide} />
+      {kind === 'starting' || kind === 'recording' ? (
+        <RecordingPill voice={voice} mode="listening" onGiveUp={hide} onDone={voice.toggle} />
+      ) : kind === 'processing' ? (
+        // 录音在转格式：外形不变，波形换成「思考中」，✕ 仍是放弃。
+        <RecordingPill voice={voice} mode="thinking" onGiveUp={hide} onDone={null} />
       ) : notice !== null ? (
         <PillRow>
           <span className="pill-lines">
@@ -272,24 +297,11 @@ export function VoicePillApp() {
           )}
         </PillRow>
       ) : phase.kind === 'thinking' ? (
-        <PillRow>
-          <span className="pill-blip" aria-hidden="true" />
-          <span className="pill-text" role="status">
-            正在理解…
-          </span>
-          <button
-            type="button"
-            className="pill-icon-button"
-            aria-label="取消这次请求"
-            title="取消"
-            onClick={() => cancelThinking(phase)}
-          >
-            <CloseIcon size={14} />
-          </button>
-        </PillRow>
+        // 和录音时同一个外形，不改窗口大小、不跳：✕ 取消请求，右边转圈。
+        <RecordingPill voice={voice} mode="thinking" onGiveUp={() => cancelThinking(phase)} onDone={null} />
       ) : phase.kind === 'done' ? (
         <PillRow>
-          <span className="pill-text" role="status">
+          <span className="pill-text" role="status" title={phase.text}>
             {phase.text}
           </span>
           <button type="button" className="pill-button" onClick={undoThis}>
@@ -310,7 +322,7 @@ export function VoicePillApp() {
         </PillRow>
       ) : phase.kind === 'tip' ? (
         <PillRow>
-          <span className="pill-text" role="status">
+          <span className="pill-text" role="status" title={phase.text}>
             {phase.text}
           </span>
           {phase.toSettings && (
@@ -329,49 +341,83 @@ function PillRow({ children }: { children: ReactNode }) {
   return <div className="pill pill-row">{children}</div>
 }
 
-/** 录音中：黑色胶囊、✕、随音量跳动的波形小点、✓。 */
-function RecordingPill({ voice, onGiveUp }: { voice: VoiceController; onGiveUp: () => void }) {
+/** 录音中 / 思考中：黑色胶囊、✕、波形小点、✓（思考中换成转圈）。两种状态外形和大小完全一样。 */
+function RecordingPill({
+  voice,
+  mode,
+  onGiveUp,
+  onDone
+}: {
+  voice: VoiceController
+  mode: 'listening' | 'thinking'
+  onGiveUp: () => void
+  onDone: (() => void) | null
+}) {
+  const listening = mode === 'listening'
   return (
     <div className="pill pill-recording">
-      <button type="button" className="pill-icon-button" aria-label="放弃这次录音" title="放弃" onClick={onGiveUp}>
-        <CloseIcon size={14} />
-      </button>
-      <Waveform voice={voice} />
       <button
         type="button"
-        className="pill-icon-button is-solid"
-        aria-label="说完了"
-        title="说完了"
-        onClick={voice.toggle}
+        className="pill-icon-button"
+        aria-label={listening ? '放弃这次录音' : '取消'}
+        title={listening ? '放弃' : '取消'}
+        onClick={onGiveUp}
       >
-        <CheckIcon size={15} />
+        <CloseIcon size={13} />
       </button>
+      {listening ? <Waveform voice={voice} /> : <ThinkingDots />}
+      {onDone === null ? (
+        <span className="pill-icon-button is-solid is-busy" aria-hidden="true">
+          <span className="pill-spinner" />
+        </span>
+      ) : (
+        <button type="button" className="pill-icon-button is-solid" aria-label="说完了" title="说完了" onClick={onDone}>
+          <CheckIcon size={15} />
+        </button>
+      )}
       <span className="sr-only" role="status">
-        正在录音，说完点右边的按钮，Esc 放弃
+        {listening ? '正在录音，说完点右边的按钮' : '正在理解…'}
       </span>
     </div>
   )
 }
 
-/** 一排随音量跳动的小点。只改样式，不跟着每一帧重新渲染。 */
+/** 思考中：同一排小点依次轻轻起伏（纯 CSS）。 */
+function ThinkingDots() {
+  return (
+    <span className="pill-wave is-thinking" aria-hidden="true">
+      {Array.from({ length: DOT_COUNT }, (_, index) => (
+        <span key={index} className="pill-dot" style={{ '--i': index } as CSSProperties} />
+      ))}
+    </span>
+  )
+}
+
+/**
+ * 一排白色小点：没出声时是一排圆点（和参考图一样），说话时按音量拉长成圆头竖条，中间的高、两边的低。
+ * 改的是 height 不是 scaleY（scaleY 会把圆头压成椭圆）；只改样式，不跟着每一帧重新渲染。
+ */
 function Waveform({ voice }: { voice: VoiceController }) {
   const dotsRef = useRef<(HTMLSpanElement | null)[]>([])
   const { level } = voice
 
   useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let frame = 0
-    const offsets = Array.from({ length: DOT_COUNT }, (_, index) => (index / DOT_COUNT) * Math.PI * 2)
+    let smoothed = 0
     const draw = (): void => {
-      const value = Math.min(1, level() * 2.4)
-      const time = performance.now() / 190
+      const raw = Math.max(0, level() - LEVEL_GATE) * 1.8
+      const target = Math.min(1, raw)
+      // 起得快、落得慢，看起来跟着说话的节奏，而不是乱闪。
+      smoothed += (target - smoothed) * (target > smoothed ? 0.45 : 0.12)
+      const time = performance.now() / 160
       dotsRef.current.forEach((dot, index) => {
         if (dot === null) return
-        // 中间的点动得多、两端的少一点，看起来像一段波形。
         const distance = Math.abs(index - (DOT_COUNT - 1) / 2) / ((DOT_COUNT - 1) / 2)
-        const wave = 0.5 + 0.5 * Math.sin(time + (offsets[index] ?? 0))
-        const scale = 0.3 + (1 - distance * 0.55) * (0.15 + value) * wave
-        dot.style.transform = `scaleY(${scale.toFixed(3)})`
+        const envelope = 1 - distance * 0.6
+        const ripple = still ? 1 : 0.55 + 0.45 * Math.sin(time + index * 0.9)
+        const height = DOT_MIN_PX + (DOT_MAX_PX - DOT_MIN_PX) * smoothed * envelope * ripple
+        dot.style.height = `${height.toFixed(1)}px`
       })
       frame = window.requestAnimationFrame(draw)
     }
