@@ -42,8 +42,9 @@ function placementFor(size: Size, anchor: Anchor): Rectangle {
   }
 }
 
-/** 重新声明置顶并顶到最上面（不激活）：每次显示、改大小后调用，压住别的置顶窗口（任务栏、其它置顶程序）。 */
+/** 重新声明置顶并顶到最上面（不激活）：每次显示、改大小后调用，压住别的置顶窗口（任务栏、其它置顶程序）。隐藏时不调用，免得把空窗口顶出来。 */
 function raiseToTop(win: BrowserWindow): void {
+  if (!win.isVisible()) return
   win.setAlwaysOnTop(true, 'screen-saver')
   win.moveTop()
 }
