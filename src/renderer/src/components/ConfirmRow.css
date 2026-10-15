@@ -114,3 +114,59 @@
 .confirm-row.is-delete:not(.is-off) {
   box-shadow: 0 0 0 1px var(--color-peach-accent);
 }
+
+/* 分类和紧急度胶囊：放在时间胶囊旁边，点 × 撤掉（分类 = 不归类，紧急度 = 普通）。 */
+.confirm-row-tag {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 88px;
+  height: 24px;
+  padding: 0 3px 0 9px;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.confirm-row-tag.is-category {
+  background: var(--color-mint-soft);
+  color: var(--color-mint-ink);
+}
+
+.confirm-row-tag.is-high {
+  background: var(--color-peach);
+  color: var(--color-peach-text);
+}
+
+.confirm-row-tag.is-low {
+  background: var(--color-done-bg);
+  color: var(--color-ink-muted);
+}
+
+.confirm-row-tag-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.confirm-row-tag-x {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.confirm-row-tag-x:hover {
+  background: var(--color-divider);
+}

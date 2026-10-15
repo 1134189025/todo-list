@@ -35,6 +35,8 @@ export type TasksController = {
   ) => void
   /** 只弹出带「撤销」的提示，不改列表（改动已经做过了）。 */
   offerUndo: (message: string, undoChange: (current: Task[]) => Task[]) => void
+  /** 只弹出提示，不带撤销（改动已经做过、而且撤不掉，例如新建分类）。 */
+  notify: (message: string) => void
   dismissCorruptNotice: () => void
 }
 
@@ -136,6 +138,8 @@ export function useTasks(showToast: ShowToast): TasksController {
     [replace, showToast]
   )
 
+  const notify = useCallback((message: string): void => showToast(message), [showToast])
+
   const replaceWithUndo = useCallback(
     (next: Task[], message: string, undoChange: (current: Task[]) => Task[], nextCategories?: Category[]): void => {
       if (latest.current === null) return
@@ -167,6 +171,7 @@ export function useTasks(showToast: ShowToast): TasksController {
     replace,
     replaceWithUndo,
     offerUndo,
+    notify,
     dismissCorruptNotice
   }
 }

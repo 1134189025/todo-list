@@ -1,4 +1,5 @@
 import type { TaskPatch, TasksSnapshot } from './taskPatch'
+import type { Urgency } from './types'
 
 export type ErrorCode =
   | 'NOT_CONFIGURED'
@@ -72,11 +73,25 @@ export type SettingsPatch = {
   floatWindow?: Partial<FloatWindowSettings>   // 只改传了的字段
 }
 
-export type ParsedItem = { title: string; date: string | null; time: string | null }
+/**
+ * AI 指令里新建的一条待办。category：分类名（规范化后），null = AI 没写或拿不准，不归类；
+ * urgency：紧急度，null = AI 没写（渲染进程当普通）。
+ */
+export type ParsedItem = {
+  title: string
+  date: string | null
+  time: string | null
+  category: string | null
+  urgency: Urgency | null
+}
 
 /**
  * AI 指令识别出的一项操作。id 是真实任务 id（主进程已把编号映射回来）。
  * reschedule 里 date / time 不出现 = 不改；null = 清掉（date 为 null 时 time 也清掉）。
+ * categorize：category 为分类名，分类不存在时新建；null = 移出分类。
+ * urgency：level 为 high（紧急）/ normal（普通）/ low（不急）。
+ * start / pause：开始做（设为进行中）/ 取消进行中。
+ * createCategory：只新建分类，不动任务；同名已存在时不建。
  */
 export type AiAction =
   | { op: 'add'; item: ParsedItem }
@@ -85,6 +100,11 @@ export type AiAction =
   | { op: 'reschedule'; id: string; date?: string | null; time?: string | null }
   | { op: 'rename'; id: string; title: string }
   | { op: 'delete'; id: string }
+  | { op: 'categorize'; id: string; category: string | null }
+  | { op: 'urgency'; id: string; level: Urgency }
+  | { op: 'start'; id: string }
+  | { op: 'pause'; id: string }
+  | { op: 'createCategory'; name: string }
 
 /**
  * unmatched：用户提到了、但在现有待办里对不上的说法。
