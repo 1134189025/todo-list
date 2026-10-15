@@ -99,9 +99,10 @@ export type SummaryResult = {
 
 export interface QingxinApi {
   tasks: {
-    // corruptBackup：本次启动备份出的坏文件名；skipped：本次启动跳过的不合法任务条数（整个文件损坏时为 0）
+    // TasksSnapshot = { tasks, categories, revision }：任务和分类一起传、一起合并。
+    // corruptBackup：本次启动备份出的坏文件名；skipped：本次启动跳过的不合法条数（任务和分类都算，整个文件损坏时为 0）
     load(): Promise<Result<TasksSnapshot & { corruptBackup: string | null; skipped: number }>>
-    // 只发改动（见 taskPatch.ts），主进程合并到最新列表后返回合并结果；saveError 不为 null 表示已合并但写盘失败
+    // 只发改动（见 taskPatch.ts），主进程合并到最新数据后返回合并结果；saveError 不为 null 表示已合并但写盘失败
     apply(patch: TaskPatch): Promise<Result<TasksSnapshot & { saveError: string | null }>>
   }
   settings: {
@@ -131,7 +132,7 @@ export interface QingxinApi {
   events: {
     onSummaryShow(cb: (s: SummaryResult) => void): () => void  // 返回取消订阅函数
     onVoiceHotkey(cb: () => void): () => void                   // 全局快捷键被按下
-    onTasksChanged(cb: (snapshot: TasksSnapshot) => void): () => void  // 别的窗口改了任务
+    onTasksChanged(cb: (snapshot: TasksSnapshot) => void): () => void  // 别的窗口改了任务或分类
     onSettingsChanged(cb: (s: PublicSettings) => void): () => void  // 设置变了（托盘、悬浮窗、别的窗口）
   }
   app: {

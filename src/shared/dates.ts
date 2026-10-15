@@ -1,8 +1,11 @@
-import type { Task } from './types'
+import type { Task, Urgency } from './types'
 
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/
 const NO_TIME_SORT_KEY = '99:99'
+
+// 紧急度排序权重：紧急在前，普通居中，不急在后。
+const URGENCY_RANK: Record<Urgency, number> = { high: 0, normal: 1, low: 2 }
 
 type OpenGroup = 0 | 1 | 2
 
@@ -76,7 +79,16 @@ function openGroup(task: Task, today: string): OpenGroup {
   return 2
 }
 
+// 两个未完成列表共用的前缀：先按紧急度，同一档里进行中的在前。
+function compareUrgencyAndProgress(a: Task, b: Task): number {
+  const urgencyDiff = URGENCY_RANK[a.urgency] - URGENCY_RANK[b.urgency]
+  if (urgencyDiff !== 0) return urgencyDiff
+  return Number(b.inProgress) - Number(a.inProgress)
+}
+
 function compareOpenTasks(a: Task, b: Task, today: string): number {
+  const urgencyDiff = compareUrgencyAndProgress(a, b)
+  if (urgencyDiff !== 0) return urgencyDiff
   const group = openGroup(a, today)
   const groupDiff = group - openGroup(b, today)
   if (groupDiff !== 0) return groupDiff
@@ -90,6 +102,8 @@ function compareOpenTasks(a: Task, b: Task, today: string): number {
 }
 
 function compareLaterOpenTasks(a: Task, b: Task): number {
+  const urgencyDiff = compareUrgencyAndProgress(a, b)
+  if (urgencyDiff !== 0) return urgencyDiff
   const dateDiff = compareText(a.dueDate ?? '', b.dueDate ?? '')
   if (dateDiff !== 0) return dateDiff
   const timeDiff = compareText(a.dueTime ?? NO_TIME_SORT_KEY, b.dueTime ?? NO_TIME_SORT_KEY)

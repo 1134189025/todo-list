@@ -9,9 +9,10 @@ import {
 } from './atomicFile'
 import { fail, ok } from '@shared/result'
 import type { Result } from '@shared/api'
-import { applyTaskPatch, type TaskPatch, type TasksSnapshot } from '@shared/taskPatch'
-import { isRecord, validateTask } from '@shared/validate'
-import type { Task } from '@shared/types'
+import { applyTaskPatch, type TaskPatch, type TasksSnapshot, type TasksState } from '@shared/taskPatch'
+import { isRecord, validateCategory, validateTask } from '@shared/validate'
+import { sameCategoryName } from '@shared/text'
+import { CATEGORY_LIMIT, type Category, type Task } from '@shared/types'
 
 const FILE_VERSION = 1
 
@@ -20,17 +21,22 @@ export type LoadedTasks = TasksSnapshot & { corruptBackup: string | null; skippe
 export type TasksStore = {
   initialize(): Promise<Result<null>>
   load(): Promise<Result<LoadedTasks>>
-  /** 把改动合并到内存里的最新列表（同步完成）再写盘；返回写完时内存里的列表。 */
+  /** 把改动合并到内存里的最新数据（同步完成）再写盘；返回写完时内存里的数据。 */
   apply(patch: TaskPatch): Promise<Result<TasksSnapshot & { saveError: string | null }>>
+  /** 只要任务，给 AI 命令和总结用（它们不认识分类）。 */
   snapshot(): Task[]
+  /** 任务 + 分类的一份拷贝。 */
+  state(): TasksState
   versioned(): TasksSnapshot
   flush(): Promise<void>
 }
 
-type FileOutcome = { kind: 'corrupt' } | { kind: 'readable'; tasks: Task[]; skipped: number }
+type FileOutcome = { kind: 'corrupt' } | { kind: 'readable'; state: TasksState; skipped: number }
 
-// 整个文件读不懂（坏 JSON、不是对象、版本不对、tasks 不是数组）才算 corrupt；
+// 整个文件读不懂（坏 JSON、不是对象、版本不对、tasks 不是数组、categories 有但不是数组）才算 corrupt；
 // 单条不合法或 id 重复的只跳过那一条，重复保留第一条。
+// 旧任务缺 urgency / inProgress / categoryId 由 validateTask 补默认值，不算不合法；
+// 分类名字规范化后为空、id 重复、和前面某个分类重名（不区分大小写）、超出 CATEGORY_LIMIT 的跳过。
 function parseTasksFile(raw: string): FileOutcome {
   let data: unknown
   try {
@@ -41,11 +47,15 @@ function parseTasksFile(raw: string): FileOutcome {
   if (!isRecord(data) || data.version !== FILE_VERSION || !Array.isArray(data.tasks)) {
     return { kind: 'corrupt' }
   }
-  const entries: unknown[] = data.tasks
+  // 没有 categories 字段 = 空列表（旧文件就是这样）。
+  const categoryEntries: unknown = data.categories === undefined ? [] : data.categories
+  if (!Array.isArray(categoryEntries)) return { kind: 'corrupt' }
   const tasks: Task[] = []
+  const categories: Category[] = []
   const seenIds = new Set<string>()
+  const seenCategoryIds = new Set<string>()
   let skipped = 0
-  for (const entry of entries) {
+  for (const entry of data.tasks as unknown[]) {
     const checked = validateTask(entry)
     if (!checked.ok || seenIds.has(checked.value.id)) {
       skipped += 1
@@ -54,21 +64,35 @@ function parseTasksFile(raw: string): FileOutcome {
     seenIds.add(checked.value.id)
     tasks.push(checked.value)
   }
-  return { kind: 'readable', tasks, skipped }
+  for (const entry of categoryEntries as unknown[]) {
+    const checked = validateCategory(entry)
+    if (
+      !checked.ok ||
+      seenCategoryIds.has(checked.value.id) ||
+      categories.some((category) => sameCategoryName(category.name, checked.value.name)) ||
+      categories.length >= CATEGORY_LIMIT
+    ) {
+      skipped += 1
+      continue
+    }
+    seenCategoryIds.add(checked.value.id)
+    categories.push(checked.value)
+  }
+  return { kind: 'readable', state: { tasks, categories }, skipped }
 }
 
-function serialize(tasks: Task[]): string {
-  return `${JSON.stringify({ version: FILE_VERSION, tasks }, null, 2)}\n`
+function serialize(state: TasksState): string {
+  return `${JSON.stringify({ version: FILE_VERSION, tasks: state.tasks, categories: state.categories }, null, 2)}\n`
 }
 
 export function createTasksStore(filePath: string): TasksStore {
   const writer: QueuedWriter = createQueuedWriter(filePath)
-  let tasks: Task[] = []
+  let state: TasksState = { tasks: [], categories: [] }
   let revision = 0
   let writable = false
   let corruptBackup: string | null = null
   let skipped = 0
-  // 部分任务被跳过、且原文件还没备份成功时为 true：此时不允许覆盖原文件。
+  // 部分条目被跳过、且原文件还没备份成功时为 true：此时不允许覆盖原文件。
   let backupPending = false
   let initialized: Promise<Result<null>> | null = null
 
@@ -88,7 +112,7 @@ export function createTasksStore(filePath: string): TasksStore {
     } catch {
       return fail('IO', '数据文件已损坏且无法备份，为保护原文件已暂停保存')
     }
-    tasks = []
+    state = { tasks: [], categories: [] }
     skipped = 0
     writable = true
     return ok(null)
@@ -100,7 +124,7 @@ export function createTasksStore(filePath: string): TasksStore {
       raw = await fs.readFile(filePath, 'utf8')
     } catch (error) {
       if (errorCode(error) === 'ENOENT') {
-        tasks = []
+        state = { tasks: [], categories: [] }
         writable = true
         return ok(null)
       }
@@ -108,7 +132,7 @@ export function createTasksStore(filePath: string): TasksStore {
     }
     const outcome = parseTasksFile(raw)
     if (outcome.kind === 'corrupt') return recoverWholeFile()
-    tasks = outcome.tasks
+    state = outcome.state
     skipped = outcome.skipped
     writable = true
     if (skipped === 0) return ok(null)
@@ -116,8 +140,8 @@ export function createTasksStore(filePath: string): TasksStore {
       backupPending = true
       return ok(null)
     }
-    // 备份已存在，写回清理后的列表；写回失败时原文件和备份都还在，之后的保存会再写。
-    await writer.write(serialize(tasks))
+    // 备份已存在，写回清理后的数据；写回失败时原文件和备份都还在，之后的保存会再写。
+    await writer.write(serialize(state))
     return ok(null)
   }
 
@@ -131,15 +155,15 @@ export function createTasksStore(filePath: string): TasksStore {
     return initialized
   }
 
-  async function save(next: Task[]): Promise<Result<null>> {
+  async function save(next: TasksState): Promise<Result<null>> {
     if (!writable) return fail('IO', '任务数据还没有读取成功，暂不保存')
-    tasks = next
+    state = next
     revision += 1
     if (backupPending && !(await backupOriginal())) {
       return fail('IO', '数据文件还没有备份，为保护原文件暂不保存')
     }
     // 等备份时可能又来了新的保存：总是写内存里最新的一份，不按到达顺序写旧的。
-    const result = await writer.write(serialize(tasks))
+    const result = await writer.write(serialize(state))
     return result.ok ? ok(null) : fail('IO', result.message)
   }
 
@@ -150,19 +174,27 @@ export function createTasksStore(filePath: string): TasksStore {
     async load(): Promise<Result<LoadedTasks>> {
       const result = await ensureInitialized()
       if (!result.ok) return result
-      return ok({ tasks: [...tasks], revision, corruptBackup, skipped })
+      return ok({ tasks: [...state.tasks], categories: [...state.categories], revision, corruptBackup, skipped })
     },
     async apply(patch: TaskPatch): Promise<Result<TasksSnapshot & { saveError: string | null }>> {
       if (!writable) return fail('IO', '任务数据还没有读取成功，暂不保存')
-      const saved = await save(applyTaskPatch(tasks, patch, (task) => validateTask(task).ok))
-      // 写盘期间可能又合并了别的窗口的改动：返回此刻内存里的列表，它比之前推给任何窗口的都新。
-      return ok({ tasks: [...tasks], revision, saveError: saved.ok ? null : saved.error.message })
+      const saved = await save(applyTaskPatch(state, patch, (task) => validateTask(task).ok))
+      // 写盘期间可能又合并了别的窗口的改动：返回此刻内存里的数据，它比之前推给任何窗口的都新。
+      return ok({
+        tasks: [...state.tasks],
+        categories: [...state.categories],
+        revision,
+        saveError: saved.ok ? null : saved.error.message
+      })
     },
     snapshot(): Task[] {
-      return [...tasks]
+      return [...state.tasks]
+    },
+    state(): TasksState {
+      return { tasks: [...state.tasks], categories: [...state.categories] }
     },
     versioned(): TasksSnapshot {
-      return { tasks: [...tasks], revision }
+      return { tasks: [...state.tasks], categories: [...state.categories], revision }
     },
     flush(): Promise<void> {
       return writer.flush()

@@ -1,8 +1,8 @@
 import { FLOAT_OPACITY_MIN, type AiApiFormat, type CommandInput, type FloatWindowSettings, type SettingsPatch, type VoiceClip } from './api'
-import { TASK_FIELDS, type TaskFields, type TaskPatch } from './taskPatch'
+import { TASK_FIELDS, type CategoryPatch, type TaskFields, type TaskPatch } from './taskPatch'
 import { isDateKey, isIsoTimestamp, isTimeKey } from './dates'
-import { TITLE_MAX } from './text'
-import type { Task, TaskSource } from './types'
+import { normalizeCategoryName, TITLE_MAX } from './text'
+import { DEFAULT_URGENCY, URGENCIES, type Category, type Task, type TaskSource, type Urgency } from './types'
 
 export type Validation<T> = { ok: true; value: T } | { ok: false; message: string }
 
@@ -57,6 +57,15 @@ function validateTaskSource(value: unknown): TaskSource | null {
   return value === 'manual' || value === 'ai' ? value : null
 }
 
+function isUrgency(value: unknown): value is Urgency {
+  return typeof value === 'string' && URGENCIES.some((known) => known === value)
+}
+
+/** 任务里指向分类的 id：空、超长或不是字符串都按「没有分类」处理（不 trim，id 是不透明字符串）。 */
+function isCategoryId(value: unknown): value is string {
+  return typeof value === 'string' && value.length >= 1 && value.length <= ID_MAX
+}
+
 function nullableMatching(value: unknown, check: (text: string) => boolean): string | null | undefined {
   if (value === null) return null
   if (typeof value === 'string' && check(value)) return value
@@ -68,6 +77,9 @@ function matching(value: unknown, check: (text: string) => boolean): string | un
   return undefined
 }
 
+// 校验一条任务。除整条格式外，还负责补齐 / 修正后加的字段：
+// urgency 不是三档之一 → normal；inProgress 不是布尔 → false；done 为 true 时 inProgress 一律 false；
+// categoryId 不是 1–100 的字符串（含缺省、null）→ null。这些都是「修正」，不算不合法、不跳过。
 export function validateTask(value: unknown): Validation<Task> {
   if (!isRecord(value)) return invalid('任务格式不正确')
   const id = boundedText(value.id, 1, ID_MAX)
@@ -87,12 +99,39 @@ export function validateTask(value: unknown): Validation<Task> {
   if (completedAt === undefined) return invalid('任务完成时间不合法')
   const source = validateTaskSource(value.source)
   if (source === null) return invalid('任务来源不合法')
-  return valid({ id, title, done, dueDate, dueTime, createdAt, completedAt, source })
+  const urgency = isUrgency(value.urgency) ? value.urgency : DEFAULT_URGENCY
+  const inProgress = typeof value.inProgress === 'boolean' ? value.inProgress : false
+  const categoryId = isCategoryId(value.categoryId) ? value.categoryId : null
+  return valid({
+    id,
+    title,
+    done,
+    dueDate,
+    dueTime,
+    createdAt,
+    completedAt,
+    source,
+    urgency,
+    inProgress: done ? false : inProgress,
+    categoryId
+  })
+}
+
+// 校验一条分类。名字规范化后为空、id 空或超长、createdAt 不是合法时间都算不合法（读文件时跳过这一条）。
+export function validateCategory(value: unknown): Validation<Category> {
+  if (!isRecord(value)) return invalid('分类格式不正确')
+  if (!isCategoryId(value.id)) return invalid('分类 id 不合法')
+  const name = typeof value.name === 'string' ? normalizeCategoryName(value.name) : ''
+  if (name === '') return invalid('分类名需要 1–20 个字符')
+  const createdAt = matching(value.createdAt, isIsoTimestamp)
+  if (createdAt === undefined) return invalid('分类创建时间不合法')
+  return valid({ id: value.id, name, createdAt })
 }
 
 const PATCH_MAX = 5000
 
 // 改动里的单个字段：类型和格式先在这里查，合并后的整条任务主进程再用 validateTask 查一遍。
+// 字段缺省 = 不改；显式写 null（dueDate / dueTime / completedAt / categoryId）= 清掉。
 const FIELD_CHECKS: Record<(typeof TASK_FIELDS)[number], (value: unknown) => boolean> = {
   title: (value) => boundedText(value, 1, TITLE_MAX) !== null,
   done: (value) => typeof value === 'boolean',
@@ -100,7 +139,11 @@ const FIELD_CHECKS: Record<(typeof TASK_FIELDS)[number], (value: unknown) => boo
   dueTime: (value) => nullableMatching(value, isTimeKey) !== undefined,
   createdAt: (value) => matching(value, isIsoTimestamp) !== undefined,
   completedAt: (value) => nullableMatching(value, isIsoTimestamp) !== undefined,
-  source: (value) => validateTaskSource(value) !== null
+  source: (value) => validateTaskSource(value) !== null,
+  urgency: (value) => isUrgency(value),
+  inProgress: (value) => typeof value === 'boolean',
+  // 分类 id 明确写 null = 取消分类；写别的（超长、空串、数字）整批拒绝。
+  categoryId: (value) => value === null || isCategoryId(value)
 }
 
 function validateTaskUpdate(value: unknown): Validation<{ id: string; fields: TaskFields }> {
@@ -116,14 +159,50 @@ function validateTaskUpdate(value: unknown): Validation<{ id: string; fields: Ta
   return valid({ id, fields })
 }
 
+// 分类改动：整段可以缺省（= 三样都空）。id 和任务一样是不透明字符串，不 trim。
+function validateCategoryPatch(value: unknown): Validation<CategoryPatch> {
+  if (value === undefined) return valid({ added: [], renamed: [], removedIds: [] })
+  if (!isRecord(value)) return invalid('分类改动格式不正确')
+  const { added, renamed, removedIds } = value
+  if (!Array.isArray(added) || !Array.isArray(renamed) || !Array.isArray(removedIds)) {
+    return invalid('分类改动格式不正确')
+  }
+  const patch: CategoryPatch = { added: [], renamed: [], removedIds: [] }
+  for (const entry of added as unknown[]) {
+    const category = validateCategory(entry)
+    if (!category.ok) return invalid(category.message)
+    patch.added.push(category.value)
+  }
+  for (const entry of renamed as unknown[]) {
+    if (!isRecord(entry) || !isCategoryId(entry.id)) return invalid('分类 id 不合法')
+    const name = typeof entry.name === 'string' ? normalizeCategoryName(entry.name) : ''
+    if (name === '') return invalid('分类名需要 1–20 个字符')
+    patch.renamed.push({ id: entry.id, name })
+  }
+  for (const entry of removedIds as unknown[]) {
+    if (!isCategoryId(entry)) return invalid('分类 id 不合法')
+    patch.removedIds.push(entry)
+  }
+  return valid(patch)
+}
+
+function categoryPatchCount(patch: CategoryPatch): number {
+  return patch.added.length + patch.renamed.length + patch.removedIds.length
+}
+
 export function validateTaskPatch(value: unknown): Validation<TaskPatch> {
   if (!isRecord(value)) return invalid('任务改动格式不正确')
   const { added, updated, removedIds } = value
   if (!Array.isArray(added) || !Array.isArray(updated) || !Array.isArray(removedIds)) {
     return invalid('任务改动格式不正确')
   }
-  if (added.length + updated.length + removedIds.length > PATCH_MAX) return invalid('一次改动的任务太多')
-  const patch: TaskPatch = { added: [], updated: [], removedIds: [] }
+  const categories = validateCategoryPatch(value.categories)
+  if (!categories.ok) return invalid(categories.message)
+  // 一次改动的总条数上限把任务和分类一起算。
+  if (added.length + updated.length + removedIds.length + categoryPatchCount(categories.value) > PATCH_MAX) {
+    return invalid('一次改动的任务太多')
+  }
+  const patch: TaskPatch = { added: [], updated: [], removedIds: [], categories: categories.value }
   for (const entry of added as unknown[]) {
     if (!isRecord(entry) || typeof entry.index !== 'number' || !Number.isInteger(entry.index) || entry.index < 0) {
       return invalid('新加任务的位置不合法')
