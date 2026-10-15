@@ -1,13 +1,16 @@
-import type { Task, TaskSource } from '@shared/types'
+import { normalizeCategoryName } from '@shared/text'
+import { DEFAULT_URGENCY, type Category, type Task, type TaskSource, type Urgency } from '@shared/types'
 
 export type NewTaskFields = {
   title: string
   dueDate: string | null
   dueTime: string | null
   source: TaskSource
+  urgency?: Urgency          // 不传 = 普通
+  categoryId?: string | null // 不传 = 未分类
 }
 
-/** 新建一条未完成的任务。调用方负责把标题过一遍 truncateTitle。 */
+/** 新建一条未完成的任务；进行中恒为 false。调用方负责把标题过一遍 truncateTitle。 */
 export function createTask(fields: NewTaskFields, nowIso: string): Task {
   return {
     id: crypto.randomUUID(),
@@ -17,18 +20,33 @@ export function createTask(fields: NewTaskFields, nowIso: string): Task {
     dueTime: fields.dueTime,
     createdAt: nowIso,
     completedAt: null,
-    source: fields.source
+    source: fields.source,
+    urgency: fields.urgency ?? DEFAULT_URGENCY,
+    inProgress: false,
+    categoryId: fields.categoryId ?? null
   }
 }
 
-/** 直接添加的待办：没有日期（算今天）、没有时间、手动来源。 */
+/** 直接添加的待办：没有日期（算今天）、没有时间、手动来源、普通紧急度、未分类。 */
 export function createTodayTask(title: string, nowIso: string): Task {
   return createTask({ title, dueDate: null, dueTime: null, source: 'manual' }, nowIso)
 }
 
+/** 取消完成，或标记完成；完成时把进行中一起清掉（完成的任务不能是进行中）。 */
 export function toggleDone(task: Task, nowIso: string): Task {
   if (task.done) return { ...task, done: false, completedAt: null }
-  return { ...task, done: true, completedAt: nowIso }
+  return { ...task, done: true, completedAt: nowIso, inProgress: false }
+}
+
+/** 切换进行中；已完成的任务不变（完成的任务本来就不是进行中）。 */
+export function toggleInProgress(task: Task): Task {
+  if (task.done) return task
+  return { ...task, inProgress: !task.inProgress }
+}
+
+/** 新建一个分类，id 用 crypto.randomUUID()，名字先规范化。调用方要确认规范化后不为空。 */
+export function createCategory(name: string, nowIso: string): Category {
+  return { id: crypto.randomUUID(), name: normalizeCategoryName(name), createdAt: nowIso }
 }
 
 /** 撤销添加：从当前列表去掉这次加的那几条。 */
