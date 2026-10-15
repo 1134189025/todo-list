@@ -1,17 +1,16 @@
 import { useState, type KeyboardEvent } from 'react'
 import { todayProgress } from '@shared/dates'
 import { truncateTitle } from '@shared/text'
-import type { Task } from '@shared/types'
 import { CloseIcon, LockIcon, MicIcon, OpenMainIcon, PinIcon } from '../components/icons'
 import { callApi } from '../lib/callApi'
-import { formatTaskWhen } from '../lib/labels'
 import { createTodayTask, toggleDone } from '../lib/taskOps'
-import { buildTaskView } from '../lib/taskView'
 import { useFloatToggle } from '../state/useFloatToggle'
 import { useSettings } from '../state/useSettings'
 import { useTasks } from '../state/useTasks'
 import { useToday } from '../state/useToday'
-import { FloatTaskItem } from './FloatTaskItem'
+import { FloatTaskList } from './FloatTaskList'
+import { pendingGroupKey } from './floatGroups'
+import { useOpenGroups } from './useOpenGroups'
 import './FloatApp.css'
 
 const MAX_LENGTH = 200
@@ -24,6 +23,7 @@ export function FloatApp() {
   const today = useToday()
   const tasks = useTasks(noToast)
   const settings = useSettings()
+  const groups = useOpenGroups()
   const [draft, setDraft] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
   const floatToggle = useFloatToggle(settings.settings, settings.save)
@@ -47,12 +47,19 @@ export function FloatApp() {
     tasks.replace(current.map((task) => (task.id === id ? toggleDone(task, nowIso) : task)))
   }
 
+  function toggleGroup(key: string): void {
+    groups.setOpen(key, !groups.isOpen(key))
+  }
+
   function addTask(): void {
     const current = tasks.snapshot()
     const title = truncateTitle(draft)
     if (current === null || title === '') return
     tasks.replace([createTodayTask(title, new Date().toISOString()), ...current])
     setDraft('')
+    // 新加的待办是未分类的：未分类组收着就展开它，免得加了看不见。
+    const key = pendingGroupKey(null)
+    if (!groups.isOpen(key)) groups.setOpen(key, true)
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
@@ -114,7 +121,16 @@ export function FloatApp() {
           </button>
         </div>
       </header>
-      <main className="float-body">{renderList(list, today, toggleTask)}</main>
+      <main className="float-body">
+        <FloatTaskList
+          list={list}
+          categories={tasks.categories}
+          today={today}
+          isOpen={groups.isOpen}
+          onToggleGroup={toggleGroup}
+          onToggle={toggleTask}
+        />
+      </main>
       {error !== null && (
         <p className="float-error" role="alert">
           {error}
@@ -147,26 +163,5 @@ export function FloatApp() {
         </button>
       </div>
     </div>
-  )
-}
-
-function renderList(list: Task[] | null, today: string, onToggle: (id: string) => void) {
-  if (list === null) return <p className="float-empty">正在读取待办…</p>
-  const view = buildTaskView(list, today).today
-  if (view.pending.length === 0 && view.done.length === 0) {
-    return <p className="float-empty">今天还没有待办</p>
-  }
-  return (
-    <>
-      {view.pending.length === 0 && <p className="float-empty">今天的事都做完啦</p>}
-      <ul className="float-list">
-        {view.pending.map((task) => (
-          <FloatTaskItem key={task.id} task={task} when={formatTaskWhen(task, today)} onToggle={onToggle} />
-        ))}
-        {view.done.map((task) => (
-          <FloatTaskItem key={task.id} task={task} when={null} onToggle={onToggle} />
-        ))}
-      </ul>
-    </>
   )
 }
