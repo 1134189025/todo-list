@@ -6,6 +6,7 @@ import { loadRenderer, offscreen, secureWebPreferences, type Size } from './wind
 // 语音胶囊：按语音键时在鼠标所在屏幕的底部弹出的小窗口。
 // 它不抢焦点（用户可能正在别的程序里打字）、不进任务栏、压在全屏应用上面。
 // 第一次用时创建，之后隐藏复用；页面按内容自己申请大小，主进程保持底边不动向上长。
+// 每次显示、改大小后都重新置顶（见 raiseToTop）：Windows 上窗口隐藏再显示，topmost 可能被别的置顶窗口压住。
 
 const DEFAULT_SIZE = { width: 260, height: 72 }
 const EDGE_GAP = 48
@@ -39,6 +40,13 @@ function placementFor(size: Size, anchor: Anchor): Rectangle {
     width: size.width,
     height: size.height
   }
+}
+
+/** 重新声明置顶并顶到最上面（不激活）：每次显示、改大小后调用，压住别的置顶窗口（任务栏、其它置顶程序）。隐藏时不调用，免得把空窗口顶出来。 */
+function raiseToTop(win: BrowserWindow): void {
+  if (!win.isVisible()) return
+  win.setAlwaysOnTop(true, 'screen-saver')
+  win.moveTop()
 }
 
 export function createVoicePillManager(): VoicePillManager {
@@ -100,6 +108,7 @@ export function createVoicePillManager(): VoicePillManager {
       win.setBounds(placementFor({ width: bounds.width, height: bounds.height }, anchor))
       // 出现时不从用户正在用的窗口抢走焦点。
       win.showInactive()
+      raiseToTop(win)
       send()
     },
     ready(): void {
@@ -113,6 +122,7 @@ export function createVoicePillManager(): VoicePillManager {
         anchor = anchorFor()
         current.setBounds(placementFor({ width: bounds.width, height: bounds.height }, anchor))
         current.showInactive()
+        raiseToTop(current)
       }
       send()
     },
@@ -120,6 +130,7 @@ export function createVoicePillManager(): VoicePillManager {
       const current = win
       if (current === null || current.isDestroyed()) return
       current.setBounds(placementFor(size, anchor ?? anchorFor()))
+      raiseToTop(current)
     },
     hide(): void {
       if (win !== null && !win.isDestroyed()) win.hide()
