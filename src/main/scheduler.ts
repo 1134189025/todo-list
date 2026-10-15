@@ -77,7 +77,7 @@ export function startScheduler(deps: SchedulerDeps): Scheduler {
     if (!isAiConfigured(deps.settings)) return
     triggeredDate = today
     await deps.settings.setLastAutoSummaryDate(today)
-    const result = await summarizeTasks(deps.tasks, deps.settings, randomUUID(), 'auto-summary')
+    const result = await summarizeTasks(deps.tasks, deps.settings, randomUUID(), 'auto-summary', null)
     if (result.ok) publish(deps, result.data)
   }
 

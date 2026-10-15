@@ -86,15 +86,15 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   })
   handle(IPC.settingsClearApiKey, () => settingsService.clearApiKey())
 
-  handle(IPC.aiCommand, async (raw) => {
+  handle(IPC.aiCommand, async (raw, event) => {
     const checked = validateCommandRequest(raw)
     if (!checked.ok) return invalidInput(checked.message)
-    return runCommand(tasks, settings, checked.value)
+    return runCommand(tasks, settings, checked.value, event.sender.id)
   })
-  handle(IPC.aiSummarize, async (raw) => {
+  handle(IPC.aiSummarize, async (raw, event) => {
     const checked = validateSummarizeRequest(raw)
     if (!checked.ok) return invalidInput(checked.message)
-    return summarizeTasks(tasks, settings, checked.value.requestId, 'summarize')
+    return summarizeTasks(tasks, settings, checked.value.requestId, 'summarize', event.sender.id)
   })
   handle(IPC.aiTestConnection, async (raw) => {
     const checked = validateTestDraft(raw)

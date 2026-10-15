@@ -15,7 +15,9 @@ import {
 
 export type SummaryKind = 'summarize' | 'auto-summary'
 export type RequestKind = 'command' | SummaryKind
-export type Tracking = { kind: RequestKind; requestId: string }
+// owner 是发起请求的窗口（webContents.id）；主进程自己发起的（如自动总结）没有窗口，填 null。
+// 「新的取消旧的」只在同一个窗口、同一类请求之间生效，不同窗口的请求互不影响。
+export type Tracking = { kind: RequestKind; requestId: string; owner: number | null }
 
 type AbortReason = 'cancelled' | 'timeout'
 type Attempt = { controller: AbortController; reason: AbortReason | null }
@@ -33,7 +35,7 @@ const WRONG_FORMAT_MESSAGE: Record<AiApiFormat, string> = {
   gemini: '这个地址不像 Gemini 原生接口'
 }
 
-const tracked = new Map<string, { kind: RequestKind; attempt: Attempt }>()
+const tracked = new Map<string, { kind: RequestKind; owner: number | null; attempt: Attempt }>()
 
 function makeConfig(apiFormat: AiApiFormat, baseUrl: string, model: string, apiKey: string): Result<ProviderConfig> {
   const normalized = normalizeBaseUrl(baseUrl, apiFormat)
@@ -84,11 +86,12 @@ function abortAttempt(attempt: Attempt, reason: AbortReason): void {
 
 function startTracking(tracking: Tracking, attempt: Attempt): void {
   for (const [requestId, entry] of tracked) {
-    if (entry.kind === tracking.kind || requestId === tracking.requestId) {
+    const sameKindInSameWindow = entry.kind === tracking.kind && entry.owner === tracking.owner
+    if (sameKindInSameWindow || requestId === tracking.requestId) {
       abortAttempt(entry.attempt, 'cancelled')
     }
   }
-  tracked.set(tracking.requestId, { kind: tracking.kind, attempt })
+  tracked.set(tracking.requestId, { kind: tracking.kind, owner: tracking.owner, attempt })
 }
 
 function stopTracking(tracking: Tracking, attempt: Attempt): void {
