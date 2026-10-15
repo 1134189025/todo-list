@@ -208,7 +208,13 @@ export function useAiFlow({ tasks, restoreDraft, today }: Options): AiFlow {
         receive(said.clip === null ? said : { script: result.data.heard ?? '', clip: said.clip }, result.data)
         return
       }
-      if (result.error.code === 'CANCELLED') return
+      // 不是用户自己点的取消（cancelRequest 会先把 requestRef 置 null，走不到这里）：同一窗口又发了一条，
+      // 主进程取消了这条。原话放回输入框，回到待机，不然卡片会一直停在「正在理解」。
+      if (result.error.code === 'CANCELLED') {
+        restoreScript(said)
+        setStage({ kind: 'idle' })
+        return
+      }
       setStage({ kind: 'failed', ...said, code: result.error.code, message: result.error.message })
     })
   }

@@ -37,6 +37,13 @@ export type TaskPatch = {
  */
 export type TasksSnapshot = TasksState & { revision: number }
 
+/**
+ * 分类 id 别名表（只在主进程内存里，不写盘）：某个分类 id 已经被删掉、或因重名被去重了，
+ * 之后才到的补丁里仍用这个 id 指向它的任务，要改指到这里记的 id；值为 null 表示改成未分类。
+ * 别名可以串起来（先去重、再删掉留下的那个），用 resolveCategoryAlias 一路找到底。
+ */
+export type CategoryAliases = ReadonlyMap<string, string | null>
+
 export const TASK_FIELDS = [
   'title',
   'done',
@@ -106,51 +113,64 @@ export function diffTasks(previous: TasksState, next: TasksState): TaskPatch {
   return { added, updated, removedIds, categories: diffCategories(previous.categories, next.categories) }
 }
 
+/**
+ * 按别名表找分类 id 最终指向的 id：不在表里原样返回；一路指到未分类（null）或绕成环时返回 null。
+ */
+export function resolveCategoryAlias(id: string, aliases: CategoryAliases): string | null {
+  let current: string | null = id
+  const visited = new Set<string>()
+  while (current !== null && aliases.has(current)) {
+    if (visited.has(current)) return null
+    visited.add(current)
+    current = aliases.get(current) ?? null
+  }
+  return current
+}
+
+/** 任务的分类 id 按别名表改写：不在表里、或本来是 null 的原样返回。 */
+export function remapTask(task: Task, aliases: CategoryAliases): Task {
+  if (task.categoryId === null || !aliases.has(task.categoryId)) return task
+  return { ...task, categoryId: resolveCategoryAlias(task.categoryId, aliases) }
+}
+
 type CategoryMerge = {
   list: Category[]
-  /**
-   * 某个分类 id 被「删掉」或「新加但没加成」时，指向它的任务该改成哪个 id（null = 未分类）。
-   * 不在表里的 id 原样保留：即使它指向一个不存在的分类，也当「未分类」显示而不是删掉字段。
-   */
-  remap: Map<string, string | null>
+  /** 合并后的别名表：本次删掉、去重、或因满了没加上的分类 id 记进来；留下的分类 id 不在表里。 */
+  aliases: Map<string, string | null>
 }
 
 // 合并分类部分。不修改传进来的对象，一律产生新数组 / 新分类对象。
-function mergeCategories(current: readonly Category[], patch: CategoryPatch): CategoryMerge {
+function mergeCategories(current: readonly Category[], patch: CategoryPatch, aliases: CategoryAliases): CategoryMerge {
   const list: Category[] = []
   const present = new Set<string>()
-  const remap = new Map<string, string | null>()
+  const next = new Map(aliases)
   const removed = new Set(patch.removedIds)
 
-  // 1. 删除：从列表去掉；只有真的去掉了一个分类，才把指向它的任务改成未分类。
+  // 1. 删除：从列表去掉，并记成别名 null。
   for (const category of current) {
     if (removed.has(category.id)) {
-      remap.set(category.id, null)
+      next.set(category.id, null)
       continue
     }
     list.push(category)
     present.add(category.id)
   }
 
-  // 2. 新增：id 已存在 → 跳过；和已有分类重名 → 不加，指向它的任务改指已有的那个；
-  //    已经满了 → 不加，指向它的任务改成未分类。
+  // 2. 新增：id 已存在 → 跳过；和已有分类重名 → 不加，记成别名指向已有的那个；
+  //    已经满了 → 不加，记成别名 null。
   for (const category of patch.added) {
-    if (present.has(category.id)) {
-      remap.delete(category.id)
-      continue
-    }
+    if (present.has(category.id)) continue
     const duplicate = list.find((existing) => sameCategoryName(existing.name, category.name))
     if (duplicate !== undefined) {
-      remap.set(category.id, duplicate.id)
+      next.set(category.id, duplicate.id)
       continue
     }
     if (list.length >= CATEGORY_LIMIT) {
-      remap.set(category.id, null)
+      next.set(category.id, null)
       continue
     }
     list.push(category)
     present.add(category.id)
-    remap.delete(category.id)
   }
 
   // 3. 改名：分类不存在、或新名字和另一个分类重名，这条改名不生效。
@@ -162,26 +182,34 @@ function mergeCategories(current: readonly Category[], patch: CategoryPatch): Ca
     list[index] = { ...list[index]!, name }
   }
 
-  return { list, remap }
+  // 4. 留下的分类 id 不能再是别名：撤销删除把同 id 的分类加回来时，指向它的任务要留在它上面。
+  for (const category of list) next.delete(category.id)
+
+  return { list, aliases: next }
 }
 
-function fixCategoryId(task: Task, remap: Map<string, string | null>): Task {
-  if (task.categoryId === null || !remap.has(task.categoryId)) return task
-  return { ...task, categoryId: remap.get(task.categoryId) ?? null }
+export type TaskPatchResult = {
+  state: TasksState
+  /** 合并后的别名表，调用方要保存下来，供之后的补丁使用。 */
+  aliases: Map<string, string | null>
 }
 
 /**
  * 主进程：把补丁合并到当前数据上。
  * 任务部分：已存在的 id 不重复加；已被删掉的不因为「改过」而复活；字段合并后不再是合法任务的
  * （例如别处刚清掉日期、这边只改了时间），这条改动不生效。
- * 分类部分见 mergeCategories；合并完再保证 done 为 true 的任务 inProgress 一律为 false。
+ * 分类部分见 mergeCategories；所有任务的分类 id 按合并后的别名表改写（之前删掉 / 去重过的分类 id 也一样），
+ * 合并完再保证 done 为 true 的任务 inProgress 一律为 false。
+ * aliases 是进程里现有的别名表；返回合并后的数据和更新过的别名表。
  */
 export function applyTaskPatch(
   current: TasksState,
   patch: TaskPatch,
-  isValid: (task: Task) => boolean
-): TasksState {
-  const { list: categories, remap } = mergeCategories(current.categories, patch.categories)
+  isValid: (task: Task) => boolean,
+  aliases: CategoryAliases = new Map()
+): TaskPatchResult {
+  const merge = mergeCategories(current.categories, patch.categories, aliases)
+  const remap = merge.aliases
   const removed = new Set(patch.removedIds)
   const updates = new Map<string, TaskFields>()
   for (const { id, fields } of patch.updated) updates.set(id, { ...updates.get(id), ...fields })
@@ -189,18 +217,21 @@ export function applyTaskPatch(
     .filter((task) => !removed.has(task.id))
     .map((task) => {
       const fields = updates.get(task.id)
-      if (fields === undefined) return fixCategoryId(task, remap)
+      if (fields === undefined) return remapTask(task, remap)
       const candidate: Task = { ...task, ...fields }
-      return fixCategoryId(isValid(candidate) ? candidate : task, remap)
+      return remapTask(isValid(candidate) ? candidate : task, remap)
     })
   const present = new Set(merged.map((task) => task.id))
   for (const { task, index } of [...patch.added].sort((a, b) => a.index - b.index)) {
     if (present.has(task.id) || removed.has(task.id)) continue
-    merged.splice(Math.min(index, merged.length), 0, fixCategoryId(task, remap))
+    merged.splice(Math.min(index, merged.length), 0, remapTask(task, remap))
     present.add(task.id)
   }
   return {
-    tasks: merged.map((task) => (task.done && task.inProgress ? { ...task, inProgress: false } : task)),
-    categories
+    state: {
+      tasks: merged.map((task) => (task.done && task.inProgress ? { ...task, inProgress: false } : task)),
+      categories: merge.list
+    },
+    aliases: remap
   }
 }

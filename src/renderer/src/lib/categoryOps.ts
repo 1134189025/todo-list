@@ -1,11 +1,12 @@
 import type { TasksState } from '@shared/taskPatch'
-import { normalizeCategoryName, sameCategoryName } from '@shared/text'
+import { hasVisibleChar, normalizeCategoryName, sameCategoryName, tidyCategoryName } from '@shared/text'
 import { CATEGORY_LIMIT, CATEGORY_NAME_MAX, type Category } from '@shared/types'
 
 export type NameCheck = { ok: true; name: string } | { ok: false; message: string }
 
 /**
- * 分类名检查，不保存：trim、压缩空白后 1–20 个字，和其它分类不重名（不区分大小写）。
+ * 分类名检查，不保存：先去看不见的字符（零宽字符等）、压缩空白，没有看得见的字就是空名字；1–20 个字，
+ * 和其它分类不重名（不区分大小写）。
  * selfId：改名时排除自己。creating：新建时还要检查没有超过上限。
  */
 export function checkCategoryName(
@@ -14,13 +15,13 @@ export function checkCategoryName(
   selfId?: string,
   creating = false
 ): NameCheck {
-  const collapsed = raw.replace(/\s+/g, ' ').trim()
-  if (collapsed === '') return { ok: false, message: '分类名不能为空' }
-  if (collapsed.length > CATEGORY_NAME_MAX) return { ok: false, message: `分类名最多 ${CATEGORY_NAME_MAX} 个字` }
+  const tidy = tidyCategoryName(raw)
+  if (!hasVisibleChar(tidy)) return { ok: false, message: '分类名不能为空' }
+  if (tidy.length > CATEGORY_NAME_MAX) return { ok: false, message: `分类名最多 ${CATEGORY_NAME_MAX} 个字` }
   if (creating && categories.length >= CATEGORY_LIMIT) {
     return { ok: false, message: `分类最多 ${CATEGORY_LIMIT} 个，先删掉一些再新建` }
   }
-  const name = normalizeCategoryName(collapsed)
+  const name = normalizeCategoryName(tidy)
   if (categories.some((category) => category.id !== selfId && sameCategoryName(category.name, name))) {
     return { ok: false, message: `已经有叫「${name}」的分类了` }
   }

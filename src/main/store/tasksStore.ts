@@ -9,7 +9,13 @@ import {
 } from './atomicFile'
 import { fail, ok } from '@shared/result'
 import type { Result } from '@shared/api'
-import { applyTaskPatch, type TaskPatch, type TasksSnapshot, type TasksState } from '@shared/taskPatch'
+import {
+  applyTaskPatch,
+  remapTask,
+  type TaskPatch,
+  type TasksSnapshot,
+  type TasksState
+} from '@shared/taskPatch'
 import { isRecord, validateCategory, validateTask } from '@shared/validate'
 import { sameCategoryName } from '@shared/text'
 import { CATEGORY_LIMIT, type Category, type Task } from '@shared/types'
@@ -31,12 +37,16 @@ export type TasksStore = {
   flush(): Promise<void>
 }
 
-type FileOutcome = { kind: 'corrupt' } | { kind: 'readable'; state: TasksState; skipped: number }
+type FileOutcome =
+  | { kind: 'corrupt' }
+  | { kind: 'readable'; state: TasksState; aliases: Map<string, string>; skipped: number }
 
 // 整个文件读不懂（坏 JSON、不是对象、版本不对、tasks 不是数组）才算 corrupt；
 // 单条不合法或 id 重复的只跳过那一条，重复保留第一条；categories 字段不是数组时当成空分类列表，计一条跳过。
 // 旧任务缺 urgency / inProgress / categoryId 由 validateTask 补默认值，不算不合法；
-// 分类名字规范化后为空、id 重复、和前面某个分类重名（不区分大小写）、超出 CATEGORY_LIMIT 的跳过。
+// 分类名字规范化后为空、id 重复、超出 CATEGORY_LIMIT 的跳过。
+// 和前面某个分类重名（不区分大小写）的也跳过，但记成别名（它的 id → 留下的那个分类 id），
+// 指向它的任务改指留下的那个；超出上限的不记别名，任务保留原值（界面显示未分类）。
 function parseTasksFile(raw: string): FileOutcome {
   let data: unknown
   try {
@@ -55,6 +65,7 @@ function parseTasksFile(raw: string): FileOutcome {
   const categories: Category[] = []
   const seenIds = new Set<string>()
   const seenCategoryIds = new Set<string>()
+  const aliases = new Map<string, string>()
   let skipped = data.categories === undefined || categoriesIsArray ? 0 : 1
   for (const entry of data.tasks as unknown[]) {
     const checked = validateTask(entry)
@@ -67,19 +78,26 @@ function parseTasksFile(raw: string): FileOutcome {
   }
   for (const entry of categoryEntries) {
     const checked = validateCategory(entry)
-    if (
-      !checked.ok ||
-      seenCategoryIds.has(checked.value.id) ||
-      categories.some((category) => sameCategoryName(category.name, checked.value.name)) ||
-      categories.length >= CATEGORY_LIMIT
-    ) {
+    if (!checked.ok || seenCategoryIds.has(checked.value.id)) {
+      skipped += 1
+      continue
+    }
+    const duplicate = categories.find((category) => sameCategoryName(category.name, checked.value.name))
+    if (duplicate !== undefined) {
+      aliases.set(checked.value.id, duplicate.id)
+      skipped += 1
+      continue
+    }
+    if (categories.length >= CATEGORY_LIMIT) {
       skipped += 1
       continue
     }
     seenCategoryIds.add(checked.value.id)
     categories.push(checked.value)
   }
-  return { kind: 'readable', state: { tasks, categories }, skipped }
+  // 重名被跳过的分类，指向它的任务改指留下的那个（任务本身不跳过）。
+  const remapped = tasks.map((task) => remapTask(task, aliases))
+  return { kind: 'readable', state: { tasks: remapped, categories }, aliases, skipped }
 }
 
 function serialize(state: TasksState): string {
@@ -89,6 +107,8 @@ function serialize(state: TasksState): string {
 export function createTasksStore(filePath: string): TasksStore {
   const writer: QueuedWriter = createQueuedWriter(filePath)
   let state: TasksState = { tasks: [], categories: [] }
+  // 分类 id 别名表（只在内存里）：删掉 / 去重过的分类 id → 留下的分类 id（null = 未分类）。见 taskPatch.ts 的 CategoryAliases。
+  let aliases: Map<string, string | null> = new Map()
   let revision = 0
   let writable = false
   let corruptBackup: string | null = null
@@ -114,6 +134,7 @@ export function createTasksStore(filePath: string): TasksStore {
       return fail('IO', '数据文件已损坏且无法备份，为保护原文件已暂停保存')
     }
     state = { tasks: [], categories: [] }
+    aliases = new Map()
     skipped = 0
     writable = true
     return ok(null)
@@ -134,6 +155,7 @@ export function createTasksStore(filePath: string): TasksStore {
     const outcome = parseTasksFile(raw)
     if (outcome.kind === 'corrupt') return recoverWholeFile()
     state = outcome.state
+    aliases = new Map(outcome.aliases)
     skipped = outcome.skipped
     writable = true
     if (skipped === 0) return ok(null)
@@ -179,7 +201,9 @@ export function createTasksStore(filePath: string): TasksStore {
     },
     async apply(patch: TaskPatch): Promise<Result<TasksSnapshot & { saveError: string | null }>> {
       if (!writable) return fail('IO', '任务数据还没有读取成功，暂不保存')
-      const saved = await save(applyTaskPatch(state, patch, (task) => validateTask(task).ok))
+      const merged = applyTaskPatch(state, patch, (task) => validateTask(task).ok, aliases)
+      aliases = new Map(merged.aliases)
+      const saved = await save(merged.state)
       // 写盘期间可能又合并了别的窗口的改动：返回此刻内存里的数据，它比之前推给任何窗口的都新。
       return ok({
         tasks: [...state.tasks],
