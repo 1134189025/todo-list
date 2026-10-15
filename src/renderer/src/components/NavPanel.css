@@ -99,6 +99,7 @@
 
 .nav-panel-spacer {
   flex: 1;
+  min-height: 0;
 }
 
 .nav-panel-float {

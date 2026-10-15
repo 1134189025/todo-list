@@ -197,6 +197,43 @@ export function LockIcon(props: IconProps) {
   )
 }
 
+/** 紧急：小旗。 */
+export function FlagIcon(props: IconProps) {
+  return (
+    <Icon strokeWidth={2} {...props}>
+      <path d="M5.5 21V4M5.5 4.5h11l-2 4 2 4h-11" />
+    </Icon>
+  )
+}
+
+/** 分类：标签。 */
+export function TagIcon(props: IconProps) {
+  return (
+    <Icon strokeWidth={1.9} {...props}>
+      <path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3a1.4 1.4 0 0 1 0 2l-6.2 6.2a1.4 1.4 0 0 1-2 0z" />
+      <circle cx="8" cy="8" r="1.4" />
+    </Icon>
+  )
+}
+
+/** 更多：三个点。 */
+export function MoreIcon(props: IconProps) {
+  return (
+    <Icon strokeWidth={2.4} {...props}>
+      <path d="M5 12h.01M12 12h.01M19 12h.01" />
+    </Icon>
+  )
+}
+
+/** 开始做：播放箭头。 */
+export function PlayIcon(props: IconProps) {
+  return (
+    <Icon strokeWidth={2} {...props}>
+      <path d="M8 5.5v13l10-6.5z" />
+    </Icon>
+  )
+}
+
 /** 打开主窗口：向右上的箭头出框。 */
 export function OpenMainIcon(props: IconProps) {
   return (

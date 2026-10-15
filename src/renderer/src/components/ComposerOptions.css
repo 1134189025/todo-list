@@ -1,0 +1,41 @@
+.composer-options {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.composer-pill {
+  max-width: 100%;
+  min-width: 0;
+  height: 30px;
+  flex: none;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-done-bg);
+  color: var(--color-ink-secondary);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.composer-pill:hover {
+  background: var(--color-caption-hover);
+}
+
+.composer-pill.is-urgent {
+  background: var(--color-urgent-bg);
+  color: var(--color-urgent-ink);
+  font-weight: 600;
+}
+
+.composer-pill-text {
+  min-width: 0;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

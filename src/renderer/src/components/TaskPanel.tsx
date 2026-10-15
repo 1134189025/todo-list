@@ -1,17 +1,22 @@
 import type { ReactNode } from 'react'
 import { todayProgress } from '@shared/dates'
-import type { Task } from '@shared/types'
+import type { Category, Task } from '@shared/types'
+import { type CategoryCounts, type CategoryFilter, filterTasks, sortCategories } from '../lib/categoryFilter'
 import { localSummaryLine } from '../lib/localSummary'
 import { buildTaskView, type TabKey } from '../lib/taskView'
+import { CategorySelect } from './CategorySelect'
 import { DoneSection } from './DoneSection'
 import { EmptyState } from './EmptyState'
 import { Header } from './Header'
 import { SummaryStrip } from './SummaryStrip'
 import { Tabs } from './Tabs'
 import { TaskList } from './TaskList'
+import type { TaskActions } from './TaskRow'
+import './TaskPanel.css'
 
 type TaskPanelProps = {
   today: string
+  /** 全部待办（页眉的进度和小结用全部；列表按分类筛选）。 */
   tasks: Task[]
   /** 总结新鲜时的 headline；为 null 时显示本地算的一句。 */
   summaryHeadline: string | null
@@ -22,11 +27,14 @@ type TaskPanelProps = {
   doneOpen: boolean
   onToggleDone: () => void
   freshIds: ReadonlySet<string>
-  onToggleTask: (id: string) => void
-  onRemoveTask: (id: string) => void
+  categories: Category[]
+  categoryCounts: CategoryCounts
+  filter: CategoryFilter
+  onFilterChange: (filter: CategoryFilter) => void
+  actions: TaskActions
 }
 
-/** 列表区的内容：页眉、小结条、标签页，以及当前标签页的列表 / 空状态 / 已完成。 */
+/** 列表区的内容：页眉、小结条、标签页（窄窗口时带分类下拉），以及当前标签页的列表 / 空状态 / 已完成。 */
 export function TaskPanel({
   today,
   tasks,
@@ -38,14 +46,18 @@ export function TaskPanel({
   doneOpen,
   onToggleDone,
   freshIds,
-  onToggleTask,
-  onRemoveTask
+  categories,
+  categoryCounts,
+  filter,
+  onFilterChange,
+  actions
 }: TaskPanelProps) {
   const view = buildTaskView(tasks, today)
   const progress = todayProgress(tasks, today)
-  const group = view[tab]
-  const counts = { today: view.today.pending.length, later: view.later.pending.length }
-  const allDone = tab === 'today' && view.today.pending.length === 0 && view.today.done.length > 0
+  const listView = buildTaskView(filterTasks(tasks, filter, categories), today)
+  const group = listView[tab]
+  const counts = { today: listView.today.pending.length, later: listView.later.pending.length }
+  const allDone = tab === 'today' && listView.today.pending.length === 0 && listView.today.done.length > 0
 
   let body: ReactNode
   if (allDone) {
@@ -58,8 +70,8 @@ export function TaskPanel({
         tasks={group.pending}
         today={today}
         freshIds={freshIds}
-        onToggle={onToggleTask}
-        onRemove={onRemoveTask}
+        categories={categories}
+        actions={actions}
       />
     )
   }
@@ -75,6 +87,12 @@ export function TaskPanel({
       />
       <div className="task-inline-tabs">
         <Tabs active={tab} counts={counts} onChange={onTabChange} />
+        <CategorySelect
+          categories={sortCategories(categories)}
+          counts={categoryCounts}
+          filter={filter}
+          onChange={onFilterChange}
+        />
       </div>
       {body}
       {group.done.length > 0 && (
@@ -83,9 +101,9 @@ export function TaskPanel({
           today={today}
           open={doneOpen}
           freshIds={freshIds}
+          categories={categories}
+          actions={actions}
           onToggleOpen={onToggleDone}
-          onToggle={onToggleTask}
-          onRemove={onRemoveTask}
         />
       )}
     </>

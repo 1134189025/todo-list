@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { diffTasks, isEmptyPatch, type TasksSnapshot, type TasksState } from '@shared/taskPatch'
+
 import type { Category, Task } from '@shared/types'
 import { callApi } from '../lib/callApi'
 
@@ -35,6 +36,15 @@ export type TasksController = {
   ) => void
   /** 只弹出带「撤销」的提示，不改列表（改动已经做过了）。 */
   offerUndo: (message: string, undoChange: (current: Task[]) => Task[]) => void
+  /**
+   * 替换任务和分类（整份）并弹出「撤销」。撤销时对撤销时的当前整份数据做逆操作，任务和分类一起撤回。
+   * 删除分类用它：撤销时把分类放回，并把那几件待办改回原来的分类。
+   */
+  replaceWithUndoState: (
+    next: TasksState,
+    message: string,
+    undoState: (current: TasksState) => TasksState
+  ) => void
   dismissCorruptNotice: () => void
 }
 
@@ -145,6 +155,20 @@ export function useTasks(showToast: ShowToast): TasksController {
     [replace, offerUndo]
   )
 
+  const replaceWithUndoState = useCallback(
+    (next: TasksState, message: string, undoState: (current: TasksState) => TasksState): void => {
+      if (latest.current === null) return
+      replace(next.tasks, next.categories)
+      showToast(message, () => {
+        const current = latest.current
+        if (current === null) return
+        const restored = undoState(current)
+        replace(restored.tasks, restored.categories)
+      })
+    },
+    [replace, showToast]
+  )
+
   const snapshot = useCallback(() => latest.current?.tasks ?? null, [])
 
   const categoriesSnapshot = useCallback(() => latest.current?.categories ?? null, [])
@@ -167,6 +191,7 @@ export function useTasks(showToast: ShowToast): TasksController {
     replace,
     replaceWithUndo,
     offerUndo,
+    replaceWithUndoState,
     dismissCorruptNotice
   }
 }

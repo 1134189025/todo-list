@@ -1,16 +1,16 @@
-import type { Task } from '@shared/types'
-import { TaskRow } from './TaskRow'
+import type { Category, Task } from '@shared/types'
+import { TaskRow, type TaskActions } from './TaskRow'
 import './TaskList.css'
 
 type TaskListProps = {
   tasks: Task[]
   today: string
   freshIds: ReadonlySet<string>
-  onToggle: (id: string) => void
-  onRemove: (id: string) => void
+  categories: readonly Category[]
+  actions: TaskActions
 }
 
-export function TaskList({ tasks, today, freshIds, onToggle, onRemove }: TaskListProps) {
+export function TaskList({ tasks, today, freshIds, categories, actions }: TaskListProps) {
   return (
     <ul className="task-list">
       {tasks.map((task) => (
@@ -19,8 +19,8 @@ export function TaskList({ tasks, today, freshIds, onToggle, onRemove }: TaskLis
           task={task}
           today={today}
           fresh={freshIds.has(task.id)}
-          onToggle={onToggle}
-          onRemove={onRemove}
+          categories={categories}
+          actions={actions}
         />
       ))}
     </ul>

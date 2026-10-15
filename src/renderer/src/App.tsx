@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Task } from '@shared/types'
+import { DEFAULT_URGENCY, type Category, type Task, type Urgency } from '@shared/types'
 import { todayProgress } from '@shared/dates'
 import { TITLE_MAX, truncateTitle } from '@shared/text'
 import { AiCard } from './components/AiCard'
@@ -11,15 +11,18 @@ import { NavPanel } from './components/NavPanel'
 import { Notice } from './components/Notice'
 import { SettingsDialog } from './components/SettingsDialog'
 import { SummaryPanel } from './components/SummaryPanel'
+import type { TaskActions } from './components/TaskRow'
 import { TaskPanel } from './components/TaskPanel'
 import { TitleBar } from './components/TitleBar'
 import { Toast } from './components/Toast'
 import { VoiceCard } from './components/VoiceCard'
 import { isAiConfigured } from './lib/aiForm'
+import { categoryIdOrNull, countCategories, filterTasks } from './lib/categoryFilter'
 import { localSummaryLine } from './lib/localSummary'
-import { createTask, restoreAt, toggleDone, withoutIds } from './lib/taskOps'
+import { createTask, restoreAt, toggleDone, toggleInProgress, withoutIds } from './lib/taskOps'
 import { buildTaskView, type TabKey } from './lib/taskView'
 import { useAiFlow } from './state/useAiFlow'
+import { useCategories } from './state/useCategories'
 import { useFloatToggle } from './state/useFloatToggle'
 import { useSettings } from './state/useSettings'
 import { useSummary } from './state/useSummary'
@@ -29,6 +32,7 @@ import { useToday } from './state/useToday'
 import { useVoice, type VoiceAvailability } from './state/useVoice'
 
 const NO_WHEN: ComposerWhen = { date: null, time: null }
+const NO_CATEGORIES: Category[] = []
 
 function timeGreeting(hour: number): string {
   if (hour < 5) return '夜深了'
@@ -49,6 +53,7 @@ export function App() {
   const today = useToday()
   const toast = useToast()
   const tasks = useTasks(toast.show)
+  const catalog = useCategories(tasks)
   const settings = useSettings()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -60,9 +65,16 @@ export function App() {
   // null = 还没手动选过：配置了 AI 默认「AI 整理」，没配置默认「手动添加」。
   const [chosenMode, setChosenMode] = useState<ComposerMode | null>(null)
   const [when, setWhen] = useState<ComposerWhen>(NO_WHEN)
+  // 手动添加时选的分类：null = 还没选过，跟随当前筛选的分类；选过就用选的（{ id: null } 表示未分类）。
+  const [categoryPick, setCategoryPick] = useState<{ id: string | null } | null>(null)
+  const [urgency, setUrgency] = useState<Urgency>(DEFAULT_URGENCY)
   const fallbackHinted = useRef(false)
 
   const list = tasks.tasks
+  const categories = tasks.categories ?? NO_CATEGORIES
+  const categoryCounts = countCategories(list ?? [], categories)
+  const filterCategoryId = catalog.filter.kind === 'category' ? catalog.filter.id : null
+  const composerCategory = categoryPick === null ? filterCategoryId : categoryIdOrNull(categoryPick.id, categories)
   const configured = isAiConfigured(settings.settings)
   const accelerator = settings.settings === null ? null : settings.settings.voiceHotkey.accelerator
   const composerMode: ComposerMode = chosenMode ?? (configured ? 'ai' : 'manual')
@@ -124,15 +136,26 @@ export function App() {
     const title = truncateTitle(script)
     const fallback = mode === 'ai' && !fallbackHinted.current
     if (fallback) fallbackHinted.current = true
-    // 只有手动添加模式用输入区选的日期和时间（AI 模式下时间胶囊不显示，Ctrl+Enter 和没配置 AI 时的直接添加都算今天）。
-    const picked = mode === 'direct' && composerMode === 'manual' ? when : NO_WHEN
+    // 只有手动添加模式用输入区选的日期、分类和紧急度。AI 模式下这些胶囊不显示，
+    // Ctrl+Enter 直接添加和没配置 AI 时的直接添加：日期用没有，分类用当前筛选的，紧急度用普通。
+    const manual = composerMode === 'manual'
+    const picked = mode === 'direct' && manual ? when : NO_WHEN
     const created = createTask(
-      { title, dueDate: picked.date, dueTime: picked.date === null ? null : picked.time, source: 'manual' },
+      {
+        title,
+        dueDate: picked.date,
+        dueTime: picked.date === null ? null : picked.time,
+        source: 'manual',
+        urgency: manual ? urgency : DEFAULT_URGENCY,
+        categoryId: manual ? composerCategory : filterCategoryId
+      },
       new Date().toISOString()
     )
     addTasks([created], '已添加 1 件待办')
     setDraft('')
     setWhen(NO_WHEN)
+    setCategoryPick(null)
+    setUrgency(DEFAULT_URGENCY)
     if (fallback) setNotice('还没配置 AI，已直接添加')
     else if (title.length < script.length) setNotice(`待办最多 ${TITLE_MAX} 字，超出的部分没有保存`)
     else setNotice(null)
@@ -156,6 +179,21 @@ export function App() {
       `已删除「${target.title}」`,
       (now) => restoreAt(now, target, index)
     )
+  }
+
+  function patchTask(id: string, change: (task: Task) => Task): void {
+    const current = tasks.snapshot()
+    if (current === null) return
+    tasks.replace(current.map((task) => (task.id === id ? change(task) : task)))
+  }
+
+  const taskActions: TaskActions = {
+    onToggle: toggleTask,
+    onRemove: removeTask,
+    onToggleProgress: (id) => patchTask(id, toggleInProgress),
+    onSetUrgency: (id, value) => patchTask(id, (task) => ({ ...task, urgency: value })),
+    onSetCategory: (id, value) => patchTask(id, (task) => ({ ...task, categoryId: value })),
+    onCreateCategory: catalog.create
   }
 
   const summaryHeadline = summary.fresh && summary.summary !== null ? summary.summary.headline : null
@@ -185,8 +223,11 @@ export function App() {
           doneOpen={doneOpen}
           onToggleDone={() => setDoneOpen((open) => !open)}
           freshIds={tasks.freshIds}
-          onToggleTask={toggleTask}
-          onRemoveTask={removeTask}
+          categories={categories}
+          categoryCounts={categoryCounts}
+          filter={catalog.filter}
+          onFilterChange={catalog.setFilter}
+          actions={taskActions}
         />
       </>
     )
@@ -212,12 +253,18 @@ export function App() {
           mode={composerMode}
           when={when}
           today={today}
+          categories={categories}
+          category={composerCategory}
+          urgency={urgency}
           onChange={(value) => {
             setDraft(value)
             setNotice(null)
           }}
           onModeChange={setChosenMode}
           onWhenChange={setWhen}
+          onCategoryChange={(id) => setCategoryPick({ id })}
+          onUrgencyChange={setUrgency}
+          onCreateCategory={catalog.create}
           onSubmit={submitDraft}
           onVoice={voice.toggle}
         />
@@ -226,6 +273,8 @@ export function App() {
   )
 
   const view = buildTaskView(list ?? [], today)
+  // 左栏的计数跟着分类筛选走；页眉的进度和小结仍然是全部待办。
+  const listView = buildTaskView(filterTasks(list ?? [], catalog.filter, categories), today)
   const progress = todayProgress(list ?? [], today)
   const greeting = `${timeGreeting(new Date().getHours())}！${summaryHeadline ?? localSummaryLine(view)}`
 
@@ -255,12 +304,18 @@ export function App() {
         nav={
           <NavPanel
             tab={tab}
-            counts={{ today: view.today.pending.length, later: view.later.pending.length }}
+            counts={{ today: listView.today.pending.length, later: listView.later.pending.length }}
             done={progress.done}
             total={progress.total}
             floatOpen={floatToggle.state.open}
             onTabChange={setTab}
             onToggleFloat={() => floatToggle.toggle('open')}
+            categories={categories}
+            categoryCounts={categoryCounts}
+            filter={catalog.filter}
+            onFilterChange={catalog.setFilter}
+            categoryActions={catalog}
+            categoryNotice={catalog.notice}
           />
         }
         main={main}

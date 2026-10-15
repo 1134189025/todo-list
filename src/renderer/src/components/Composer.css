@@ -74,32 +74,6 @@
   color: var(--color-ink-disabled);
 }
 
-.composer-when {
-  flex: none;
-  max-width: 40%;
-  height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: var(--color-done-bg);
-  color: var(--color-ink-secondary);
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.composer-when:hover {
-  background: var(--color-caption-hover);
-}
-
-.composer-when-text {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .composer-meta {
   min-width: 0;
   display: flex;

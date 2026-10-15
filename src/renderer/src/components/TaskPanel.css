@@ -1,0 +1,12 @@
+.task-inline-tabs {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.task-inline-tabs .tabs {
+  margin-top: 0;
+}

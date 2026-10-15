@@ -33,8 +33,8 @@ export type TasksStore = {
 
 type FileOutcome = { kind: 'corrupt' } | { kind: 'readable'; state: TasksState; skipped: number }
 
-// 整个文件读不懂（坏 JSON、不是对象、版本不对、tasks 不是数组、categories 有但不是数组）才算 corrupt；
-// 单条不合法或 id 重复的只跳过那一条，重复保留第一条。
+// 整个文件读不懂（坏 JSON、不是对象、版本不对、tasks 不是数组）才算 corrupt；
+// 单条不合法或 id 重复的只跳过那一条，重复保留第一条；categories 字段不是数组时当成空分类列表，计一条跳过。
 // 旧任务缺 urgency / inProgress / categoryId 由 validateTask 补默认值，不算不合法；
 // 分类名字规范化后为空、id 重复、和前面某个分类重名（不区分大小写）、超出 CATEGORY_LIMIT 的跳过。
 function parseTasksFile(raw: string): FileOutcome {
@@ -47,14 +47,15 @@ function parseTasksFile(raw: string): FileOutcome {
   if (!isRecord(data) || data.version !== FILE_VERSION || !Array.isArray(data.tasks)) {
     return { kind: 'corrupt' }
   }
-  // 没有 categories 字段 = 空列表（旧文件就是这样）。
-  const categoryEntries: unknown = data.categories === undefined ? [] : data.categories
-  if (!Array.isArray(categoryEntries)) return { kind: 'corrupt' }
+  // 没有 categories 字段 = 空列表（旧文件就是这样）。字段存在但不是数组：当成空分类列表，并计一条跳过，
+  // 任务照常保留；这样会走「先备份原文件再写回」的逻辑，不会把待办全空。
+  const categoriesIsArray = Array.isArray(data.categories)
+  const categoryEntries: unknown[] = categoriesIsArray ? (data.categories as unknown[]) : []
   const tasks: Task[] = []
   const categories: Category[] = []
   const seenIds = new Set<string>()
   const seenCategoryIds = new Set<string>()
-  let skipped = 0
+  let skipped = data.categories === undefined || categoriesIsArray ? 0 : 1
   for (const entry of data.tasks as unknown[]) {
     const checked = validateTask(entry)
     if (!checked.ok || seenIds.has(checked.value.id)) {
@@ -64,7 +65,7 @@ function parseTasksFile(raw: string): FileOutcome {
     seenIds.add(checked.value.id)
     tasks.push(checked.value)
   }
-  for (const entry of categoryEntries as unknown[]) {
+  for (const entry of categoryEntries) {
     const checked = validateCategory(entry)
     if (
       !checked.ok ||

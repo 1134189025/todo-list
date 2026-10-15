@@ -1,0 +1,23 @@
+.floating-popover {
+  position: fixed;
+  z-index: 30;
+  width: 264px;
+  max-width: calc(100vw - 16px);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+  box-shadow: 0 0 0 1px var(--color-border), var(--shadow-popover);
+}
+
+.floating-popover:focus {
+  outline: none;
+}
+
+.popover-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}

@@ -1,0 +1,40 @@
+.category-delete {
+  padding: 4px 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.category-delete-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.category-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.category-delete-cancel,
+.category-delete-confirm {
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--radius-button);
+  font-size: 14px;
+}
+
+.category-delete-cancel {
+  background: var(--color-quiet);
+  color: var(--color-ink-secondary);
+}
+
+.category-delete-confirm {
+  background: var(--color-danger);
+  color: var(--color-card);
+  font-weight: 600;
+}

@@ -42,6 +42,13 @@
   --color-peach: #FCE6D7;
   --color-peach-text: #8A4A26;
   --color-danger: #B3412A;
+  --color-urgent: #B4553A;
+  --color-urgent-bg: #FBE3DB;
+  --color-urgent-ink: #9A3B25;
+  --color-progress: #3D8C6C;
+  --color-progress-bg: #EAF5EE;
+  --color-progress-ring: #B9DCC9;
+  --color-progress-ink: #235C46;
 
   --shadow-composer: 0 8px 28px rgba(36, 97, 74, 0.08);
   --shadow-row-hover: 0 4px 14px rgba(36, 97, 74, 0.06);
