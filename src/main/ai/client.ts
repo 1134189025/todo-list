@@ -212,8 +212,9 @@ async function postChat(
 }
 
 /**
- * 带结构约束的发请求：服务返回 400 / 422 时说明它不认 JSON Schema，记住并立刻不带结构重发一次
- * （同一个 tracking、同样的超时规则）；重发那次的结果就是最终结果。
+ * 带结构约束的发请求：服务返回 400 / 422 时立刻不带结构重发一次（同一个 tracking、同样的超时规则）。
+ * 只有重发那次拿到 2xx 回复，才记住这家服务不支持结构；重发也失败就不记住，按重发那次的错误返回。
+ * 400 可能是别的原因（比如 Key 错），所以不能凭一次 400 就记住。
  */
 async function chatWithSchema(
   config: ProviderConfig,
@@ -226,8 +227,8 @@ async function chatWithSchema(
   const structured = config.apiFormat === 'gemini' && schema !== undefined && !schemaUnsupported.has(schemaKey(config))
   const first = await postChat(config, messages, timeoutMs, tracking, structured ? schema : undefined)
   if (!first.retryWithoutSchema) return first.reply
-  schemaUnsupported.add(schemaKey(config))
   const second = await postChat(config, messages, timeoutMs, tracking)
+  if (second.reply.ok) schemaUnsupported.add(schemaKey(config))
   return second.reply
 }
 
