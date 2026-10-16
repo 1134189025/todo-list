@@ -228,7 +228,8 @@ async function chatWithSchema(
   const first = await postChat(config, messages, timeoutMs, tracking, structured ? schema : undefined)
   if (!first.retryWithoutSchema) return first.reply
   const second = await postChat(config, messages, timeoutMs, tracking)
-  if (second.reply.ok) schemaUnsupported.add(schemaKey(config))
+  // 正文要能按该接口格式读出 AI 正文才算服务接受了结构；代理 / 登录页回的 HTML 不算。
+  if (second.reply.ok && readReplyText(config.apiFormat, second.reply.data).ok) schemaUnsupported.add(schemaKey(config))
   return second.reply
 }
 
