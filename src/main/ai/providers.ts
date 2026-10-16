@@ -32,11 +32,8 @@ export function normalizeBaseUrl(raw: string, apiFormat: AiApiFormat): Result<st
   return ok(trimmed)
 }
 
-function openAiRequest(
-  config: ProviderConfig,
-  messages: ChatMessage[],
-  schema?: RequestSchema
-): Result<ProviderRequest> {
+// OpenAI 兼容接口不发结构约束：实测 sub2api 忽略 response_format，别的服务商还可能 400，所以请求体保持原样。
+function openAiRequest(config: ProviderConfig, messages: ChatMessage[]): Result<ProviderRequest> {
   if (messages.some((message) => message.audio !== undefined)) return fail('INVALID_INPUT', AUDIO_NEEDS_GEMINI_MESSAGE)
   return ok({
     endpoint: `${config.baseUrl}/chat/completions`,
@@ -44,9 +41,7 @@ function openAiRequest(
     body: JSON.stringify({
       model: config.model,
       messages: messages.map(({ role, content }) => ({ role, content })),
-      temperature: TEMPERATURE,
-      // 有结构约束时附上 response_format；没有时请求体和以前逐字节一致。
-      ...(schema === undefined ? {} : { response_format: schema.openai })
+      temperature: TEMPERATURE
     })
   })
 }
@@ -74,21 +69,21 @@ function geminiRequest(config: ProviderConfig, messages: ChatMessage[], schema?:
         temperature: TEMPERATURE,
         responseMimeType: GEMINI_RESPONSE_MIME,
         // 有结构约束时附上 responseSchema；没有时请求体和以前逐字节一致。
-        ...(schema === undefined ? {} : { responseSchema: schema.gemini }),
+        ...(schema === undefined ? {} : { responseSchema: schema }),
         thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL }
       }
     })
   }
 }
 
-/** schema 不传时请求体和不带结构约束时完全一样，见 openAiRequest / geminiRequest。 */
+/** schema 只对 Gemini 生效（responseSchema）；OpenAI 兼容不带结构。不传 schema 时请求体和以前一样。 */
 export function buildRequest(
   config: ProviderConfig,
   messages: ChatMessage[],
   schema?: RequestSchema
 ): Result<ProviderRequest> {
   return config.apiFormat === 'openai'
-    ? openAiRequest(config, messages, schema)
+    ? openAiRequest(config, messages)
     : ok(geminiRequest(config, messages, schema))
 }
 

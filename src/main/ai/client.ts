@@ -222,8 +222,9 @@ async function chatWithSchema(
   tracking: Tracking | null,
   schema: RequestSchema | undefined
 ): Promise<Result<string>> {
-  const useSchema = schema !== undefined && !schemaUnsupported.has(schemaKey(config))
-  const first = await postChat(config, messages, timeoutMs, tracking, useSchema ? schema : undefined)
+  // 只有 Gemini 原生请求带结构；OpenAI 兼容不发结构，也就不会因为结构被拒而退回重发。
+  const structured = config.apiFormat === 'gemini' && schema !== undefined && !schemaUnsupported.has(schemaKey(config))
+  const first = await postChat(config, messages, timeoutMs, tracking, structured ? schema : undefined)
   if (!first.retryWithoutSchema) return first.reply
   schemaUnsupported.add(schemaKey(config))
   const second = await postChat(config, messages, timeoutMs, tracking)
