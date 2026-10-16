@@ -1,6 +1,7 @@
 import type { AiApiFormat, Result, VoiceClip } from '@shared/api'
 import { fail, ok } from '@shared/result'
 import { isHttpUrl, isRecord } from '@shared/validate'
+import type { RequestSchema } from './schemas'
 
 // 两种接口格式各自的地址、请求头、请求体和回复解析；发请求、超时、取消在 client.ts。
 
@@ -31,7 +32,11 @@ export function normalizeBaseUrl(raw: string, apiFormat: AiApiFormat): Result<st
   return ok(trimmed)
 }
 
-function openAiRequest(config: ProviderConfig, messages: ChatMessage[]): Result<ProviderRequest> {
+function openAiRequest(
+  config: ProviderConfig,
+  messages: ChatMessage[],
+  schema?: RequestSchema
+): Result<ProviderRequest> {
   if (messages.some((message) => message.audio !== undefined)) return fail('INVALID_INPUT', AUDIO_NEEDS_GEMINI_MESSAGE)
   return ok({
     endpoint: `${config.baseUrl}/chat/completions`,
@@ -39,12 +44,14 @@ function openAiRequest(config: ProviderConfig, messages: ChatMessage[]): Result<
     body: JSON.stringify({
       model: config.model,
       messages: messages.map(({ role, content }) => ({ role, content })),
-      temperature: TEMPERATURE
+      temperature: TEMPERATURE,
+      // 有结构约束时附上 response_format；没有时请求体和以前逐字节一致。
+      ...(schema === undefined ? {} : { response_format: schema.openai })
     })
   })
 }
 
-function geminiRequest(config: ProviderConfig, messages: ChatMessage[]): ProviderRequest {
+function geminiRequest(config: ProviderConfig, messages: ChatMessage[], schema?: RequestSchema): ProviderRequest {
   const system = messages.filter((message) => message.role === 'system').map((message) => ({ text: message.content }))
   const contents = messages
     .filter((message) => message.role === 'user')
@@ -66,14 +73,23 @@ function geminiRequest(config: ProviderConfig, messages: ChatMessage[]): Provide
       generationConfig: {
         temperature: TEMPERATURE,
         responseMimeType: GEMINI_RESPONSE_MIME,
+        // 有结构约束时附上 responseSchema；没有时请求体和以前逐字节一致。
+        ...(schema === undefined ? {} : { responseSchema: schema.gemini }),
         thinkingConfig: { thinkingLevel: GEMINI_THINKING_LEVEL }
       }
     })
   }
 }
 
-export function buildRequest(config: ProviderConfig, messages: ChatMessage[]): Result<ProviderRequest> {
-  return config.apiFormat === 'openai' ? openAiRequest(config, messages) : ok(geminiRequest(config, messages))
+/** schema 不传时请求体和不带结构约束时完全一样，见 openAiRequest / geminiRequest。 */
+export function buildRequest(
+  config: ProviderConfig,
+  messages: ChatMessage[],
+  schema?: RequestSchema
+): Result<ProviderRequest> {
+  return config.apiFormat === 'openai'
+    ? openAiRequest(config, messages, schema)
+    : ok(geminiRequest(config, messages, schema))
 }
 
 function readOpenAiText(data: unknown): Result<string> {

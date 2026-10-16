@@ -9,6 +9,7 @@ import type { TasksStore } from '../store/tasksStore'
 import { completeChat, type SummaryKind } from './client'
 import { extractJsonObject, truncateText } from './parse'
 import { buildSummaryMessages } from './prompts'
+import { SUMMARY_SCHEMA } from './schemas'
 import { quoted, readNumber, shortDate, taskFlags } from './taskText'
 
 const HEADLINE_MAX = 40
@@ -99,7 +100,12 @@ export async function summarizeTasks(
   const snapshot = tasks.snapshot()
   const prompt = buildPromptData(snapshot, now)
 
-  const reply = await completeChat(settings, { kind, requestId, owner }, buildSummaryMessages(prompt.text, now))
+  const reply = await completeChat(
+    settings,
+    { kind, requestId, owner },
+    buildSummaryMessages(prompt.text, now),
+    SUMMARY_SCHEMA
+  )
   if (!reply.ok) return reply
   const json = extractJsonObject(reply.data)
   if (!json.ok) return json
