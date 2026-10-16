@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { FLOAT_OPACITY_MIN, type PublicSettings, type SettingsPatch } from '@shared/api'
+import { FLOAT_OPACITY_MIN, type CloseAction, type PublicSettings, type SettingsPatch } from '@shared/api'
 import type { SettingsActions } from '../state/useSettings'
 import { SettingRow } from './SettingRow'
 import { Switch } from './Switch'
@@ -11,7 +11,13 @@ type WindowSettingsProps = {
 
 const OPACITY_SAVE_DELAY_MS = 200
 
-/** 设置里的「窗口」：最小化到托盘、悬浮窗开关、置顶、固定、不透明度。 */
+const CLOSE_ACTION_OPTIONS: { value: CloseAction; label: string }[] = [
+  { value: 'ask', label: '每次询问' },
+  { value: 'tray', label: '最小化到托盘' },
+  { value: 'quit', label: '直接退出' }
+]
+
+/** 设置里的「窗口」：关闭主窗口时的处理、悬浮窗开关、置顶、固定、不透明度。 */
 export function WindowSettings({ settings, save }: WindowSettingsProps) {
   const [error, setError] = useState<string | null>(null)
   const { floatWindow } = settings
@@ -43,18 +49,28 @@ export function WindowSettings({ settings, save }: WindowSettingsProps) {
     <>
       <div className="settings-card">
         <SettingRow
-          title="最小化到托盘"
+          title="关闭主窗口时"
           description={
             settings.trayAvailable
-              ? '点最小化时隐藏到任务栏右下角的托盘，点托盘图标就能找回'
-              : '现在没有托盘图标，最小化照常留在任务栏'
+              ? '点 × 关闭时：每次询问，或收到托盘（点托盘图标可以找回），或直接退出'
+              : '现在没有托盘图标，关闭主窗口会直接退出'
           }
           control={
-            <Switch
-              checked={settings.minimizeToTray}
-              label="最小化到托盘"
-              onChange={(next) => void apply({ minimizeToTray: next })}
-            />
+            <select
+              className="settings-input settings-select"
+              aria-label="关闭主窗口时"
+              value={settings.closeAction}
+              onChange={(event) => {
+                const next = CLOSE_ACTION_OPTIONS.find((item) => item.value === event.target.value)
+                if (next !== undefined) void apply({ closeAction: next.value })
+              }}
+            >
+              {CLOSE_ACTION_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
           }
         />
         <SettingRow

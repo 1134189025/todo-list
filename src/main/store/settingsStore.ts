@@ -11,6 +11,7 @@ import { DEFAULT_VOICE_HOTKEY, canonicalize, validate } from '@shared/accelerato
 import { fail, ok } from '@shared/result'
 import type {
   AiApiFormat,
+  CloseAction,
   FloatWindowSettings,
   HotkeyStatus,
   PublicSettings,
@@ -18,7 +19,7 @@ import type {
   SettingsPatch
 } from '@shared/api'
 import { isDateKey, isTimeKey } from '@shared/dates'
-import { isFloatOpacity, isRecord } from '@shared/validate'
+import { isCloseAction, isFloatOpacity, isRecord } from '@shared/validate'
 import { openAtLoginStatus } from '../loginItem'
 
 const FILE_VERSION = 1
@@ -36,7 +37,7 @@ type StoredSettings = {
   voiceHotkey: string | null
   windowBounds: WindowBounds | null
   lastAutoSummaryDate: string | null
-  minimizeToTray: boolean
+  closeAction: CloseAction
   floatWindow: StoredFloatWindow
 }
 
@@ -59,7 +60,7 @@ export type SettingsStore = {
   setWindowBounds(bounds: WindowBounds): void
   getLastAutoSummaryDate(): string | null
   setLastAutoSummaryDate(date: string): Promise<Result<null>>
-  getMinimizeToTray(): boolean
+  getCloseAction(): CloseAction
   getFloatWindow(): StoredFloatWindow
   setFloatBounds(bounds: WindowBounds): void
   flush(): Promise<void>
@@ -74,7 +75,7 @@ const DEFAULT_SETTINGS: StoredSettings = {
   voiceHotkey: DEFAULT_VOICE_HOTKEY,
   windowBounds: null,
   lastAutoSummaryDate: null,
-  minimizeToTray: true,
+  closeAction: 'ask',
   floatWindow: DEFAULT_FLOAT_WINDOW
 }
 
@@ -123,6 +124,11 @@ function booleanOr(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback
 }
 
+// 旧版的 minimizeToTray 不再读取；closeAction 缺失或不是三个值之一，按「每次询问」处理。
+function parseCloseAction(value: unknown): CloseAction {
+  return isCloseAction(value) ? value : DEFAULT_SETTINGS.closeAction
+}
+
 function parseFloatWindow(value: unknown): StoredFloatWindow {
   if (!isRecord(value)) return DEFAULT_FLOAT_WINDOW
   return {
@@ -153,7 +159,7 @@ function parseStoredSettings(raw: string): StoredSettings | null {
     windowBounds: parseWindowBounds(data.windowBounds),
     lastAutoSummaryDate:
       typeof lastAutoSummaryDate === 'string' && isDateKey(lastAutoSummaryDate) ? lastAutoSummaryDate : null,
-    minimizeToTray: booleanOr(data.minimizeToTray, DEFAULT_SETTINGS.minimizeToTray),
+    closeAction: parseCloseAction(data.closeAction),
     floatWindow: parseFloatWindow(data.floatWindow)
   }
 }
@@ -261,7 +267,7 @@ export function createSettingsStore(filePath: string, runtime: SettingsRuntime):
       openAtLogin: openAtLoginStatus(current.openAtLogin),
       encryptionAvailable: safeStorage.isEncryptionAvailable(),
       voiceHotkey: { accelerator: current.voiceHotkey, status: runtime.hotkeyStatus() },
-      minimizeToTray: current.minimizeToTray,
+      closeAction: current.closeAction,
       trayAvailable: runtime.trayAvailable(),
       floatWindow: { open, alwaysOnTop, locked, opacity }
     }
@@ -286,7 +292,7 @@ export function createSettingsStore(filePath: string, runtime: SettingsRuntime):
         autoSummary: patch.autoSummary ?? settings.autoSummary,
         openAtLogin: patch.openAtLogin ?? settings.openAtLogin,
         voiceHotkey: patch.voiceHotkey === undefined ? settings.voiceHotkey : patch.voiceHotkey,
-        minimizeToTray: patch.minimizeToTray ?? settings.minimizeToTray,
+        closeAction: patch.closeAction ?? settings.closeAction,
         floatWindow: { ...settings.floatWindow, ...patch.floatWindow }
       }))
     },
@@ -310,7 +316,7 @@ export function createSettingsStore(filePath: string, runtime: SettingsRuntime):
     setLastAutoSummaryDate(date: string): Promise<Result<null>> {
       return persist({ ...current, lastAutoSummaryDate: date })
     },
-    getMinimizeToTray: () => current.minimizeToTray,
+    getCloseAction: () => current.closeAction,
     getFloatWindow: () => current.floatWindow,
     setFloatBounds(bounds: WindowBounds): void {
       void persist({ ...current, floatWindow: { ...current.floatWindow, bounds } })

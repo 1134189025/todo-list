@@ -19,8 +19,8 @@ const TITLE_BAR_HEIGHT = 44
 type WindowOptions = {
   savedBounds: WindowBounds | null
   onBoundsChanged: (bounds: WindowBounds) => void
-  /** 最小化时是否隐藏到托盘（需要托盘图标存在，否则隐藏后找不回来）。 */
-  hideOnMinimize: () => boolean
+  /** 主窗口 close 事件：判断放行还是拦下，见 mainClose.ts。 */
+  onClose: (win: BrowserWindow, event: Electron.Event) => void
 }
 
 type Placement = Rectangle
@@ -74,9 +74,10 @@ export function createMainWindow(options: WindowOptions): BrowserWindow {
   const win = new BrowserWindow(windowOptions)
 
   win.on('ready-to-show', () => (isQuietSandbox ? win.showInactive() : win.show()))
-  win.on('close', () => options.onBoundsChanged(currentBounds(win)))
-  win.on('minimize', () => {
-    if (options.hideOnMinimize()) win.hide()
+  // 先保存窗口位置（隐藏到托盘时也要记），再交给关闭判断。
+  win.on('close', (event) => {
+    options.onBoundsChanged(currentBounds(win))
+    options.onClose(win, event)
   })
   loadRenderer(win, null)
   return win

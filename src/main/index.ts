@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { createFloatWindowManager } from './floatWindow'
 import { createHotkeyManager } from './hotkey'
+import { createMainCloseHandler } from './mainClose'
 import { broadcastSettings, registerIpcHandlers } from './ipc'
 import { restrictPermissions } from './permissions'
 import { startScheduler } from './scheduler'
@@ -53,12 +54,27 @@ async function start(): Promise<void> {
   registerIpcHandlers({ tasks, settings, settingsService, showMain: focusMainWindow, voicePill })
   const scheduler = startScheduler({ tasks, settings, getWindow: () => mainWindow })
   hotkey.start(settings.getVoiceHotkey())
+  const onMainClose = createMainCloseHandler({
+    isQuitting: () => quitting,
+    trayAvailable: () => tray?.available() ?? false,
+    closeAction: () => settings.getCloseAction(),
+    remember: (action) => settingsService.save({ closeAction: action }),
+    quit: () => app.quit()
+  })
   mainWindow = createMainWindow({
     savedBounds: settings.getWindowBounds(),
     onBoundsChanged: (bounds) => settings.setWindowBounds(bounds),
-    hideOnMinimize: () => settings.getMinimizeToTray() && (tray?.available() ?? false)
+    onClose: onMainClose
   })
-  // 关闭主窗口 = 退出程序（悬浮窗还开着也一起退出）。
+  // Windows 关机、注销时不能被「要不要退出」的询问拦住：查询阶段和真正结束时都标记为正在退出，关闭直接放行。
+  // （query-session-end 可以 preventDefault 拖延关机，这里不调用它。）
+  mainWindow.on('query-session-end', () => {
+    quitting = true
+  })
+  mainWindow.on('session-end', () => {
+    quitting = true
+  })
+  // 主窗口真正关闭（已放行）= 退出程序（悬浮窗还开着也一起退出）。
   mainWindow.on('closed', () => {
     mainWindow = null
     app.quit()
