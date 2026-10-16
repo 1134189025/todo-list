@@ -1,7 +1,7 @@
 import type { ParsedItem, Result } from '@shared/api'
 import { isDateKey, isTimeKey } from '@shared/dates'
 import { fail, ok } from '@shared/result'
-import { normalizeCategoryName, truncateTitle } from '@shared/text'
+import { hasVisibleChar, normalizeCategoryName, stripHidden, truncateTitle } from '@shared/text'
 import { URGENCIES, type Urgency } from '@shared/types'
 import { isRecord } from '@shared/validate'
 
@@ -106,11 +106,11 @@ export function readCategoryName(value: unknown): string | null {
   return name === '' ? null : name
 }
 
-/** AI 给的一条新建待办：标题去空白并截断，日期不是真实日期就置 null，没有日期时不留时间；分类和紧急度没写或不合法就是 null。 */
+/** AI 给的一条新建待办：标题去看不见的字符和空白、截断，没有一个看得见的字就丢掉；日期不是真实日期就置 null，没有日期时不留时间；分类和紧急度没写或不合法就是 null。 */
 export function sanitizeItem(value: unknown): ParsedItem | null {
   if (!isRecord(value) || typeof value.title !== 'string') return null
-  const title = value.title.trim()
-  if (title === '') return null
+  const title = stripHidden(value.title).trim()
+  if (!hasVisibleChar(title)) return null
   const date = typeof value.date === 'string' && isDateKey(value.date) ? value.date : null
   const rawTime = typeof value.time === 'string' && isTimeKey(value.time) ? value.time : null
   return {

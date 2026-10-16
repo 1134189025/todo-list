@@ -12,6 +12,7 @@ import {
   type ChatMessage,
   type ProviderConfig
 } from './providers'
+import type { RequestSchema } from './schemas'
 
 export type SummaryKind = 'summarize' | 'auto-summary'
 export type RequestKind = 'command' | SummaryKind
@@ -36,6 +37,14 @@ const WRONG_FORMAT_MESSAGE: Record<AiApiFormat, string> = {
 }
 
 const tracked = new Map<string, { kind: RequestKind; owner: number | null; attempt: Attempt }>()
+
+// 有些 AI 服务不认结构约束（收到 400 / 422），退回不带结构的方式，并在本次运行里记住这家服务不支持，
+// 之后对它直接不带结构。键：接口格式 + 规范化后的地址 + 模型名。只在内存里，不写设置、不写盘。
+const schemaUnsupported = new Set<string>()
+
+function schemaKey(config: ProviderConfig): string {
+  return `${config.apiFormat}\n${config.baseUrl}\n${config.model}`
+}
 
 function makeConfig(apiFormat: AiApiFormat, baseUrl: string, model: string, apiKey: string): Result<ProviderConfig> {
   const normalized = normalizeBaseUrl(baseUrl, apiFormat)
@@ -144,18 +153,24 @@ async function readLimitedText(response: FetchResponse): Promise<Result<string>>
   return ok(Buffer.concat(chunks).toString('utf8'))
 }
 
+// retryWithoutSchema：只在「这次真的带了结构、服务返回 400 / 422，而且这次请求没被取消或超时」时为 true
+// —— 说明它不认结构约束，调用方可以立刻不带结构重发一次。
+// 取消、超时、网络错误、401/403、429、5xx、跳转都不算。
+type ChatAttempt = { reply: Result<string>; retryWithoutSchema: boolean }
+
 /** 发出请求，返回回复的原始 JSON 文本。 */
 async function postChat(
   config: ProviderConfig,
   messages: ChatMessage[],
   timeoutMs: number,
-  tracking: Tracking | null
-): Promise<Result<string>> {
-  const request = buildRequest(config, messages)
-  if (!request.ok) return request
+  tracking: Tracking | null,
+  schema?: RequestSchema
+): Promise<ChatAttempt> {
+  const request = buildRequest(config, messages, schema)
+  if (!request.ok) return { reply: request, retryWithoutSchema: false }
   const { endpoint, headers, body } = request.data
   const allowed = checkSandboxUrl(endpoint)
-  if (!allowed.ok) return allowed
+  if (!allowed.ok) return { reply: allowed, retryWithoutSchema: false }
 
   const attempt: Attempt = { controller: new AbortController(), reason: null }
   const timer = setTimeout(() => abortAttempt(attempt, 'timeout'), timeoutMs)
@@ -171,34 +186,69 @@ async function postChat(
     })
     if (isRedirect(response)) {
       discardBody(response)
-      return fail('BAD_RESPONSE', REDIRECT_MESSAGE)
+      return { reply: fail('BAD_RESPONSE', REDIRECT_MESSAGE), retryWithoutSchema: false }
     }
     if (!response.ok) {
+      const status = response.status
       discardBody(response)
-      return statusFailure(response.status)
+      // 已经被取消或超时就别重发了（重发会绕开这次取消）。
+      const retryWithoutSchema =
+        schema !== undefined && attempt.reason === null && (status === 400 || status === 422)
+      return { reply: statusFailure(status), retryWithoutSchema }
     }
     const text = await readLimitedText(response)
-    if (attempt.reason !== null) return abortFailure(attempt)
-    return text
+    if (attempt.reason !== null) return { reply: abortFailure(attempt), retryWithoutSchema: false }
+    return { reply: text, retryWithoutSchema: false }
   } catch (error) {
     // 超时和取消优先；Electron 44 在 redirect: 'error' 下抛出含 "redirect" 的错误，据此识别跳转。
-    if (attempt.reason === null && isRedirectError(error)) return fail('BAD_RESPONSE', REDIRECT_MESSAGE)
-    return abortFailure(attempt)
+    if (attempt.reason === null && isRedirectError(error)) {
+      return { reply: fail('BAD_RESPONSE', REDIRECT_MESSAGE), retryWithoutSchema: false }
+    }
+    return { reply: abortFailure(attempt), retryWithoutSchema: false }
   } finally {
     clearTimeout(timer)
     if (tracking !== null) stopTracking(tracking, attempt)
   }
 }
 
+/**
+ * 带结构约束的发请求：服务返回 400 / 422 时立刻不带结构重发一次（同一个 tracking、同样的超时规则）。
+ * 只有重发那次拿到 2xx 回复，才记住这家服务不支持结构；重发也失败就不记住，按重发那次的错误返回。
+ * 400 可能是别的原因（比如 Key 错），所以不能凭一次 400 就记住。
+ */
+async function chatWithSchema(
+  config: ProviderConfig,
+  messages: ChatMessage[],
+  timeoutMs: number,
+  tracking: Tracking | null,
+  schema: RequestSchema | undefined
+): Promise<Result<string>> {
+  // 只有 Gemini 原生请求带结构；OpenAI 兼容不发结构，也就不会因为结构被拒而退回重发。
+  const structured = config.apiFormat === 'gemini' && schema !== undefined && !schemaUnsupported.has(schemaKey(config))
+  const first = await postChat(config, messages, timeoutMs, tracking, structured ? schema : undefined)
+  if (!first.retryWithoutSchema) return first.reply
+  const second = await postChat(config, messages, timeoutMs, tracking)
+  // 正文要能按该接口格式读出 AI 正文才算服务接受了结构；代理 / 登录页回的 HTML 不算。
+  if (second.reply.ok && readReplyText(config.apiFormat, second.reply.data).ok) schemaUnsupported.add(schemaKey(config))
+  return second.reply
+}
+
 export async function completeChat(
   settings: SettingsStore,
   tracking: Tracking,
-  messages: ChatMessage[]
+  messages: ChatMessage[],
+  schema?: RequestSchema
 ): Promise<Result<string>> {
   const config = loadChatConfig(settings)
   if (!config.ok) return config
   const hasAudio = messages.some((message) => message.audio !== undefined)
-  const reply = await postChat(config.data, messages, hasAudio ? AUDIO_TIMEOUT_MS : CHAT_TIMEOUT_MS, tracking)
+  const reply = await chatWithSchema(
+    config.data,
+    messages,
+    hasAudio ? AUDIO_TIMEOUT_MS : CHAT_TIMEOUT_MS,
+    tracking,
+    schema
+  )
   if (!reply.ok) return reply
   return readReplyText(config.data.apiFormat, reply.data)
 }
@@ -209,9 +259,10 @@ export async function testAiConnection(
 ): Promise<Result<{ model: string }>> {
   const config = resolveTestConfig(settings, draft)
   if (!config.ok) return config
+  // 测试连接不带结构约束：行为不变。
   const reply = await postChat(config.data, TEST_MESSAGES, TEST_TIMEOUT_MS, null)
-  if (!reply.ok) return reply
-  const content = readReplyText(config.data.apiFormat, reply.data)
+  if (!reply.reply.ok) return reply.reply
+  const content = readReplyText(config.data.apiFormat, reply.reply.data)
   if (!content.ok) return fail('BAD_RESPONSE', WRONG_FORMAT_MESSAGE[config.data.apiFormat])
   return ok({ model: config.data.model })
 }

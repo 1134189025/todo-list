@@ -18,6 +18,7 @@ import type { TasksStore } from '../store/tasksStore'
 import { completeChat } from './client'
 import { extractJsonObject, readCategoryName, readUrgency, sanitizeItem, truncateText } from './parse'
 import { buildCommandMessages, COMMAND_ACTION_LIMIT, HEARD_MAX, REPLY_MAX } from './prompts'
+import { COMMAND_TEXT_SCHEMA, COMMAND_VOICE_SCHEMA } from './schemas'
 import { oneLine, quoted, readNumber, shortDate, taskFlags } from './taskText'
 
 const MAX_OPEN_LISTED = 100
@@ -195,7 +196,9 @@ export async function runCommand(
   const reply = await completeChat(
     settings,
     { kind: 'command', requestId: request.requestId, owner },
-    buildCommandMessages(candidatesText(candidates, names, today), categoriesText(categories), request.input, now)
+    buildCommandMessages(candidatesText(candidates, names, today), categoriesText(categories), request.input, now),
+    // 语音要先把听到的原话写进 heard，所以两种输入用不同的结构。
+    request.input.kind === 'audio' ? COMMAND_VOICE_SCHEMA : COMMAND_TEXT_SCHEMA
   )
   if (!reply.ok) return reply
   const json = extractJsonObject(reply.data, (data) => Array.isArray(data.actions))
