@@ -1,4 +1,4 @@
-import { FLOAT_OPACITY_MIN, PILL_SIZE_LIMITS, type AiApiFormat, type CommandInput, type FloatWindowSettings, type PillSize, type SettingsPatch, type VoiceClip } from './api'
+import { CLOSE_ACTIONS, FLOAT_OPACITY_MIN, PILL_SIZE_LIMITS, type AiApiFormat, type CloseAction, type CommandInput, type FloatWindowSettings, type PillSize, type SettingsPatch, type VoiceClip } from './api'
 import { TASK_FIELDS, type CategoryPatch, type TaskFields, type TaskPatch } from './taskPatch'
 import { isDateKey, isIsoTimestamp, isTimeKey } from './dates'
 import { normalizeCategoryName, TITLE_MAX } from './text'
@@ -258,9 +258,9 @@ export function validateSettingsPatch(value: unknown): Validation<SettingsPatch>
     }
     patch.voiceHotkey = value.voiceHotkey
   }
-  if (value.minimizeToTray !== undefined) {
-    if (typeof value.minimizeToTray !== 'boolean') return invalid('最小化到托盘设置格式不正确')
-    patch.minimizeToTray = value.minimizeToTray
+  if (value.closeAction !== undefined) {
+    if (!isCloseAction(value.closeAction)) return invalid('关闭方式设置格式不正确')
+    patch.closeAction = value.closeAction
   }
   if (value.floatWindow !== undefined) {
     const floatWindow = validateFloatWindowPatch(value.floatWindow)
@@ -274,6 +274,10 @@ const FLOAT_WINDOW_KEYS = ['open', 'alwaysOnTop', 'locked'] as const
 
 export function isFloatOpacity(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= FLOAT_OPACITY_MIN && value <= 1
+}
+
+export function isCloseAction(value: unknown): value is CloseAction {
+  return typeof value === 'string' && CLOSE_ACTIONS.some((known) => known === value)
 }
 
 function validateFloatWindowPatch(value: unknown): Validation<Partial<FloatWindowSettings>> {

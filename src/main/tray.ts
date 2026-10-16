@@ -5,7 +5,7 @@ import { isQuietSandbox } from './sandbox'
 const TOOLTIP = '清新待办'
 
 export type TrayController = {
-  /** 托盘图标是否存在；不存在时最小化不能隐藏窗口，否则找不回来。 */
+  /** 托盘图标是否存在；不存在时关闭主窗口不能收到托盘，否则找不回来。 */
   available(): boolean
   /** 设置变了以后重建菜单（悬浮窗的勾选状态）。 */
   refresh(): void

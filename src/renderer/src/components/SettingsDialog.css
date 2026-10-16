@@ -94,3 +94,7 @@
   width: 140px;
   accent-color: var(--color-mint-deep);
 }
+
+.settings-select {
+  width: 160px;
+}

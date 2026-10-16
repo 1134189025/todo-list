@@ -43,6 +43,14 @@ export const PILL_SIZE_LIMITS = { minWidth: 120, maxWidth: 480, minHeight: 40, m
  */
 export type AiApiFormat = 'openai' | 'gemini'
 
+/**
+ * 关闭主窗口（×、Alt+F4）时的处理：ask = 每次弹窗询问；tray = 收到托盘；quit = 直接退出。
+ * 托盘不可用、或程序本来就在退出时，不论设置都直接关闭。
+ */
+export type CloseAction = 'ask' | 'tray' | 'quit'
+
+export const CLOSE_ACTIONS: readonly CloseAction[] = ['ask', 'tray', 'quit']
+
 /** 一段录音：16 kHz 单声道 16 位 WAV 的 base64。 */
 export type VoiceClip = { mimeType: 'audio/wav'; data: string; seconds: number }
 
@@ -59,7 +67,7 @@ export type PublicSettings = {
     accelerator: string | null   // 规范写法，见 accelerator.ts；null = 不使用快捷键
     status: HotkeyStatus         // failed = 被其它程序占用；sandbox = 挡板模式不注册
   }
-  minimizeToTray: boolean        // 最小化时隐藏到系统托盘
+  closeAction: CloseAction       // 关闭主窗口时的处理，见 CloseAction
   trayAvailable: boolean         // 托盘图标是否存在（挡板安静模式下没有）
   floatWindow: FloatWindowSettings
 }
@@ -69,7 +77,7 @@ export type SettingsPatch = {
   autoSummary?: { enabled: boolean; time: string }
   openAtLogin?: boolean
   voiceHotkey?: string | null   // 不合法返回 HOTKEY_INVALID；注册失败返回 HOTKEY_TAKEN 且保留旧的
-  minimizeToTray?: boolean
+  closeAction?: CloseAction
   floatWindow?: Partial<FloatWindowSettings>   // 只改传了的字段
 }
 
